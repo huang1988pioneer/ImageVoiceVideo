@@ -208,13 +208,13 @@ function parseScriptLines(text) {
       const gender = marker ? (marker[1] === "男" ? "male" : "female") : null;
       const clean = raw.replace(/[（(]\s*[男女]\s*[）)]/, "").trim();
 
-      // 含有「。」時以「。」分行，每句繼承同一性別標記
+      // 含有「。」時以「。」分行，每句末尾保留「。」以確保 TTS 語調正確
       if (clean.includes("。")) {
         return clean
           .split("。")
           .map((s) => s.trim())
           .filter((s) => s)
-          .map((s) => ({ text: s, gender }));
+          .map((s) => ({ text: s + "。", gender }));
       }
 
       return clean ? [{ text: clean, gender }] : [];
