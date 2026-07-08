@@ -4,6 +4,7 @@ const scriptInput = document.querySelector("#scriptInput");
 const scriptLang = document.querySelector("#scriptLang");
 const rateInput = document.querySelector("#rateInput");
 const volumeInput = document.querySelector("#volumeInput");
+const formatSelect = document.querySelector("#formatSelect");
 const generateBtn = document.querySelector("#generateBtn");
 const downloadLink = document.querySelector("#downloadLink");
 const resultVideo = document.querySelector("#resultVideo");
@@ -429,13 +430,23 @@ function activeLineIndex(elapsed, segmentDurations) {
   return Math.max(0, segmentDurations.length - 1);
 }
 
-function chooseMimeType() {
-  const types = [
+function chooseMimeType(format) {
+  if (format === "mp4") {
+    const mp4Types = [
+      "video/mp4;codecs=avc1,mp4a.40.2",
+      "video/mp4",
+    ];
+    const supportedMp4 = mp4Types.find((type) => MediaRecorder.isTypeSupported(type));
+    if (supportedMp4) return { mimeType: supportedMp4, ext: "mp4" };
+  }
+
+  const webmTypes = [
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
   ];
-  return types.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+  const supportedWebm = webmTypes.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+  return { mimeType: supportedWebm, ext: "webm" };
 }
 
 async function generateVideo() {
@@ -470,9 +481,12 @@ async function generateVideo() {
       ...destination.stream.getAudioTracks(),
     ]);
 
+    const format = formatSelect?.value || "mp4";
+    const { mimeType, ext } = chooseMimeType(format);
+
     const chunks = [];
     const recorder = new MediaRecorder(mixedStream, {
-      mimeType: chooseMimeType(),
+      mimeType,
       videoBitsPerSecond: 4500000,
       audioBitsPerSecond: 160000,
     });
@@ -516,8 +530,9 @@ async function generateVideo() {
     await done;
     await audioContext.close();
 
-    const blob = new Blob(chunks, { type: "video/webm" });
+    const blob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(blob);
+    downloadLink.download = `有聲圖片影片.${ext}`;
     downloadLink.href = url;
     downloadLink.classList.remove("hidden");
     resultVideo.src = url;
