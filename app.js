@@ -5,6 +5,8 @@ const scriptLang = document.querySelector("#scriptLang");
 const rateInput = document.querySelector("#rateInput");
 const volumeInput = document.querySelector("#volumeInput");
 const formatSelect = document.querySelector("#formatSelect");
+const filenameInput = document.querySelector("#filenameInput");
+const filenameExt = document.querySelector("#filenameExt");
 const generateBtn = document.querySelector("#generateBtn");
 const downloadLink = document.querySelector("#downloadLink");
 const resultVideo = document.querySelector("#resultVideo");
@@ -534,7 +536,9 @@ async function generateVideo() {
       sources.forEach(({ source, startAt }) => source.start(audioStartTime + startAt));
 
       worker.onmessage = () => {
-        if (doDraw() >= 1) worker.postMessage('stop');
+        // 持續繪製直到 recorder.stop()，確保 captureStream 有完整影格
+        // 不提前停止——否則 canvas 停止繪製，video track 就在此刻截斷
+        doDraw();
       };
       worker.postMessage('start');
 
@@ -560,8 +564,9 @@ async function generateVideo() {
       blob = await new Promise((resolve) => ysFixWebmDuration(blob, duration * 1000, resolve));
     }
     const url = URL.createObjectURL(blob);
-    const rawTitle = scriptLines[0]?.text || \"有聲圖片影片\";
-    const safeTitle = rawTitle.replace(/[\\\\/:*?\"<>|]/g, \"\").trim().slice(0, 60) || \"有聲圖片影片\";
+    const customName = filenameInput?.value.trim() || "";
+    const rawTitle = customName || scriptLines[0]?.text || "有聲圖片影片";
+    const safeTitle = rawTitle.replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 60) || "有聲圖片影片";
     downloadLink.download = `${safeTitle}.${ext}`;
     downloadLink.href = url;
     downloadLink.classList.remove("hidden");
