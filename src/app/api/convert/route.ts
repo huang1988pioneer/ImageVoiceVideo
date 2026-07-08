@@ -1,4 +1,5 @@
 export const runtime = 'nodejs';
+export const maxDuration = 60; // Vercel: allow up to 60s for FFmpeg conversion
 
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';

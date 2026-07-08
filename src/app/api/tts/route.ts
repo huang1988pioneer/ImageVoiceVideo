@@ -1,4 +1,5 @@
 export const runtime = 'nodejs';
+export const maxDuration = 60; // Vercel: allow up to 60s for TTS generation
 
 import { NextRequest, NextResponse } from 'next/server';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
