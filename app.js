@@ -447,7 +447,17 @@ async function generateVideo() {
   generateBtn.disabled = true;
   downloadLink.classList.add("hidden");
   resultVideo.classList.add("hidden");
-  setStatus(sourceAudioFile ? "正在建立多語字幕..." : "正在翻譯並產生多語語音...");
+
+  // 判斷是否真的需要翻譯（有任何音軌語言與語音稿語言不同）
+  const sourceLang = scriptLang?.value || "zh-TW";
+  const needsTranslation = !sourceAudioFile && tracks.some((t) => t.language !== sourceLang);
+  if (sourceAudioFile) {
+    setStatus("正在建立多語字幕...");
+  } else if (needsTranslation) {
+    setStatus("正在翻譯並產生多語語音...");
+  } else {
+    setStatus("正在產生語音...");
+  }
 
   try {
     const subtitleTracks = await buildSubtitleTracks(scriptLines, tracks);
