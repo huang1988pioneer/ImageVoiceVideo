@@ -11,6 +11,13 @@ import { which } from './which';
 
 const execFileAsync = promisify(execFile);
 
+/** GET /api/convert – lightweight probe: is FFmpeg available?
+ *  Client calls this first to avoid uploading a large blob when FFmpeg is absent. */
+export async function GET() {
+  const ffmpegPath = await which('ffmpeg');
+  return NextResponse.json({ available: !!ffmpegPath });
+}
+
 export async function POST(req: NextRequest) {
   const ffmpegPath = await which('ffmpeg');
   if (!ffmpegPath) {

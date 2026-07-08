@@ -37,16 +37,60 @@ export async function fetchTranslate(
   return data.lines as string[];
 }
 
-export async function fetchConvert(webmBlob: Blob): Promise<Blob | null> {
-  const res = await fetch('/api/convert', {
-    method: 'POST',
-    headers: { 'Content-Type': 'video/webm' },
-    body: webmBlob,
-  });
-  if (res.status === 501) return null; // FFmpeg not installed
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? res.statusText);
+// Cache FFmpeg availability to avoid repeated probes per session
+let ffmpegAvailable: boolean | null = null;
+
+async function checkFfmpegAvailable(): Promise<boolean> {
+  if (ffmpegAvailable !== null) return ffmpegAvailable;
+  try {
+    const res = await fetch('/api/convert', { method: 'GET' });
+    if (!res.ok) { ffmpegAvailable = false; return false; }
+    const data = await res.json();
+    ffmpegAvailable = !!data.available;
+  } catch {
+    ffmpegAvailable = false;
   }
-  return res.blob();
+  return ffmpegAvailable;
+}
+
+// Vercel serverless body limit ≈ 4.5 MB. Skip upload if blob is larger.
+const VERCEL_BODY_LIMIT = 4 * 1024 * 1024; // 4 MB
+
+export async function fetchConvert(webmBlob: Blob): Promise<Blob | null> {
+  // 1. Pre-check: is FFmpeg available on the server? (fast, no body)
+  const hasFfmpeg = await checkFfmpegAvailable();
+  if (!hasFfmpeg) return null;
+
+  // 2. Size guard: don't upload blobs larger than Vercel's body limit
+  if (webmBlob.size > VERCEL_BODY_LIMIT) {
+    console.warn(`[convert] Blob too large (${(webmBlob.size / 1024 / 1024).toFixed(1)} MB), skipping server conversion`);
+    return null;
+  }
+
+  // 3. Upload with a 30-second abort timeout
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const res = await fetch('/api/convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'video/webm' },
+      body: webmBlob,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.status === 501) return null; // FFmpeg not installed
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error ?? res.statusText);
+    }
+    return res.blob();
+  } catch (e) {
+    clearTimeout(timer);
+    if ((e as Error).name === 'AbortError') {
+      console.warn('[convert] Request timed out after 30s, skipping conversion');
+      return null;
+    }
+    throw e;
+  }
 }
