@@ -17,8 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         {/* ysFixWebmDuration – fixes WebM duration header for external players */}
+        {/* Hosted locally in /public to avoid CDN 404 issues */}
         <Script
-          src="https://cdn.jsdelivr.net/npm/fix-webm-duration@1.0.6/fix-webm-duration.js"
+          src="/fix-webm-duration.js"
           strategy="beforeInteractive"
         />
       </body>
