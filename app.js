@@ -499,33 +499,57 @@ async function generateVideo() {
       recorder.onstop = resolve;
     });
 
-    let animationFrame = 0;
     let audioStartTime = 0;
 
-    function animate() {
-      // 使用 audioContext.currentTime 與音訊同步，消除計時器偏差
+    function doDraw() {
       const elapsed = audioContext.currentTime - audioStartTime;
       const progress = Math.min(1, elapsed / duration);
       const lineIndex = activeLineIndex(elapsed, segmentDurations);
       drawFrame(lineIndex, subtitleTracks);
       setStatus(`正在錄製影片 ${Math.round(progress * 100)}%｜字幕 ${lineIndex + 1}/${scriptLines.length}｜語言 ${tracks.length}`);
-      if (progress < 1) {
-        animationFrame = requestAnimationFrame(animate);
-      }
+      return progress;
     }
 
     drawFrame(0, subtitleTracks);
     await audioContext.resume();
-    recorder.start(250);
-    // 記錄音訊開始的 audioContext 時間點，再排程所有音源
-    audioStartTime = audioContext.currentTime;
-    sources.forEach(({ source, startAt }) => source.start(audioStartTime + startAt));
-    animationFrame = requestAnimationFrame(animate);
-    setTimeout(() => {
-      cancelAnimationFrame(animationFrame);
-      drawFrame(scriptLines.length - 1, subtitleTracks);
-      recorder.stop();
-    }, duration * 1000 + 350);
+    
+    // 使用 Web Worker 作為渲染計時器，確保即使分頁在背景，仍能維持 30fps 渲染畫面，避免字幕延遲或掉幀
+    const workerBlob = new Blob([`
+      let timer;
+      self.onmessage = function(e) {
+        if (e.data === 'start') {
+          timer = setInterval(() => self.postMessage('tick'), 33);
+        } else if (e.data === 'stop') {
+          clearInterval(timer);
+        }
+      };
+    `], { type: 'application/javascript' });
+    const workerUrl = URL.createObjectURL(workerBlob);
+    const worker = new Worker(workerUrl);
+
+    // 監聽錄影實際開始事件，避免編碼器啟動延遲（Startup Delay）導致開頭幾秒的影音被丟棄
+    recorder.onstart = () => {
+      // 記錄音訊開始的 audioContext 時間點，再排程所有音源
+      audioStartTime = audioContext.currentTime;
+      sources.forEach(({ source, startAt }) => source.start(audioStartTime + startAt));
+
+      worker.onmessage = () => {
+        if (doDraw() >= 1) worker.postMessage('stop');
+      };
+      worker.postMessage('start');
+
+      // 基於實際錄製開始的時間，設定結束定時器
+      setTimeout(() => {
+        worker.postMessage('stop');
+        worker.terminate();
+        URL.revokeObjectURL(workerUrl);
+        drawFrame(scriptLines.length - 1, subtitleTracks);
+        recorder.stop();
+      }, duration * 1000 + 350);
+    };
+    
+    // 不使用 timeslice，避免 WebM cluster 時間戳記誤差導致影音不同步
+    recorder.start();
 
 
     await done;
