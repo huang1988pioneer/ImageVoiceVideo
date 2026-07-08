@@ -154,24 +154,26 @@ class Handler(SimpleHTTPRequestHandler):
                 ) from windows_error
 
     def create_edge_voice(self, text, language, gender, rate, volume, temp_dir):
-        import asyncio
         import edge_tts
 
         mp3_path = temp_dir / "voice.mp3"
         rate_percent = max(-50, min(50, rate * 10))
         volume_percent = volume - 100
         voice_config = VOICE_MAP[language]
+        voice_name = voice_config[gender]
         spoken_text = self.translate_text(text, voice_config["translate"])
+        print(f"[TTS] lang={language} gender={gender} voice={voice_name} rate={rate_percent:+d}% volume={volume_percent:+d}%", flush=True)
         communicate = edge_tts.Communicate(
             spoken_text,
-            voice=voice_config[gender],
+            voice_name,
             rate=f"{rate_percent:+d}%",
             volume=f"{volume_percent:+d}%",
         )
-        asyncio.run(communicate.save(str(mp3_path)))
+        communicate.save_sync(str(mp3_path))
         data = mp3_path.read_bytes()
         if len(data) < 128:
             raise RuntimeError("Edge TTS produced an empty audio file")
+        print(f"[TTS] OK {len(data)} bytes", flush=True)
         return data, "audio/mpeg"
 
     def translate_text(self, text, target):
