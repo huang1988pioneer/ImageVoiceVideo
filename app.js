@@ -530,7 +530,10 @@ async function generateVideo() {
     await done;
     await audioContext.close();
 
-    const blob = new Blob(chunks, { type: mimeType });
+    let blob = new Blob(chunks, { type: mimeType });
+    if (ext === "webm" && window.ysFixWebmDuration) {
+      blob = await new Promise((resolve) => ysFixWebmDuration(blob, duration * 1000, resolve));
+    }
     const url = URL.createObjectURL(blob);
     downloadLink.download = `有聲圖片影片.${ext}`;
     downloadLink.href = url;
