@@ -1,10 +1,12 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 import uuid
+import zipfile
 from pathlib import Path
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
@@ -16,11 +18,72 @@ VENDOR_DIR = ROOT / ".vendor"
 if VENDOR_DIR.exists():
     sys.path.insert(0, str(VENDOR_DIR))
 
-FFMPEG_PATH = shutil.which("ffmpeg")
-if FFMPEG_PATH:
-    print(f"[FFmpeg] 找到 ffmpeg：{FFMPEG_PATH}")
-else:
-    print("[FFmpeg] 未找到 ffmpeg，WebM→MP4 自動轉檔功能停用")
+FFMPEG_PATH = None
+
+
+def _ensure_ffmpeg():
+    """確保 FFmpeg 可用；若未安裝，在 Windows 上自動下載並快取至 .vendor/ffmpeg/。"""
+    global FFMPEG_PATH
+
+    # 1. 系統 PATH
+    path = shutil.which("ffmpeg")
+    if path:
+        FFMPEG_PATH = path
+        print(f"[FFmpeg] 找到：{path}", flush=True)
+        return
+
+    # 2. 專案本地快取（上次自動安裝的結果）
+    local_exe = VENDOR_DIR / "ffmpeg" / "ffmpeg.exe"
+    if local_exe.exists():
+        FFMPEG_PATH = str(local_exe)
+        print(f"[FFmpeg] 使用本地版本：{FFMPEG_PATH}", flush=True)
+        return
+
+    # 3. Windows 自動下載（Linux/macOS 請自行安裝）
+    if sys.platform != "win32":
+        print("[FFmpeg] 未安裝，請用套件管理器安裝 FFmpeg。", flush=True)
+        return
+
+    url = (
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+        "ffmpeg-master-latest-win64-gpl.zip"
+    )
+    print(f"[FFmpeg] 未安裝，開始自動下載（～80 MB）…", flush=True)
+    try:
+        req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(req, timeout=300) as resp:
+            total = int(resp.headers.get("Content-Length", 0))
+            received = 0
+            buf = io.BytesIO()
+            while True:
+                chunk = resp.read(1 << 16)   # 64 KB
+                if not chunk:
+                    break
+                buf.write(chunk)
+                received += len(chunk)
+                pct = received * 100 // total if total else 0
+                mb = received // (1024 * 1024)
+                print(f"\r[FFmpeg] 下載中 {pct:3d}%  {mb} MB", end="", flush=True)
+        print(flush=True)
+
+        local_exe.parent.mkdir(parents=True, exist_ok=True)
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            for name in zf.namelist():
+                if name.endswith("/bin/ffmpeg.exe"):
+                    local_exe.write_bytes(zf.read(name))
+                    break
+
+        if local_exe.exists():
+            FFMPEG_PATH = str(local_exe)
+            print(f"[FFmpeg] 安裝完成：{FFMPEG_PATH}", flush=True)
+        else:
+            print("[FFmpeg] 解壓失敗，zip 內找不到 ffmpeg.exe", flush=True)
+    except Exception as exc:
+        print(f"[FFmpeg] 自動安裝失敗：{exc}", flush=True)
+
+
+_ensure_ffmpeg()
 
 VOICE_MAP = {
     "zh-TW": {
