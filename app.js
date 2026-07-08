@@ -560,7 +560,9 @@ async function generateVideo() {
       blob = await new Promise((resolve) => ysFixWebmDuration(blob, duration * 1000, resolve));
     }
     const url = URL.createObjectURL(blob);
-    downloadLink.download = `有聲圖片影片.${ext}`;
+    const rawTitle = scriptLines[0]?.text || \"有聲圖片影片\";
+    const safeTitle = rawTitle.replace(/[\\\\/:*?\"<>|]/g, \"\").trim().slice(0, 60) || \"有聲圖片影片\";
+    downloadLink.download = `${safeTitle}.${ext}`;
     downloadLink.href = url;
     downloadLink.classList.remove("hidden");
     resultVideo.src = url;
