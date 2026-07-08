@@ -568,6 +568,31 @@ async function generateVideo() {
     if (ext === "webm" && window.ysFixWebmDuration) {
       blob = await new Promise((resolve) => ysFixWebmDuration(blob, duration * 1000, resolve));
     }
+
+    // 若使用者選擇 MP4 但瀏覽器不支援 H.264 MediaRecorder 而產出 WebM，
+    // 自動透過伺服器 FFmpeg 轉成 MP4（需安裝 FFmpeg）
+    if (format === "mp4" && ext === "webm" && !isFilePage) {
+      setStatus("正在轉換為 MP4…");
+      try {
+        const res = await fetch("/api/convert", {
+          method: "POST",
+          headers: { "Content-Type": "video/webm", "Content-Length": blob.size },
+          body: blob,
+        });
+        if (res.ok) {
+          blob = await res.blob();
+          ext = "mp4";
+        } else if (res.status === 501) {
+          setStatus("提示：伺服器未安裝 FFmpeg，保留 WebM 格式。請至 https://ffmpeg.org/download.html 下載並加入 PATH。");
+        } else {
+          const msg = await res.text().catch(() => res.statusText);
+          setStatus(`轉檔失敗，保留 WebM 格式（${msg}）。`);
+        }
+      } catch (e) {
+        // 網路錯誤或 fetch 失敗，保留 WebM
+      }
+    }
+
     const url = URL.createObjectURL(blob);
     const customName = filenameInput?.value.trim() || "";
     const rawTitle = customName || scriptLines[0]?.text || "有聲圖片影片";

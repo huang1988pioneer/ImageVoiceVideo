@@ -16,6 +16,12 @@ VENDOR_DIR = ROOT / ".vendor"
 if VENDOR_DIR.exists():
     sys.path.insert(0, str(VENDOR_DIR))
 
+FFMPEG_PATH = shutil.which("ffmpeg")
+if FFMPEG_PATH:
+    print(f"[FFmpeg] 找到 ffmpeg：{FFMPEG_PATH}")
+else:
+    print("[FFmpeg] 未找到 ffmpeg，WebM→MP4 自動轉檔功能停用")
+
 VOICE_MAP = {
     "zh-TW": {
         "female": "zh-TW-HsiaoChenNeural",
@@ -53,6 +59,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if path == "/api/translate":
             self.handle_translate()
+            return
+        if path == "/api/convert":
+            self.handle_convert()
             return
         self.send_error(404)
 
@@ -94,7 +103,61 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def handle_convert(self):
+        if not FFMPEG_PATH:
+            self.send_error(501, "FFmpeg not found. Install FFmpeg and restart the server.")
+            return
+
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            self.send_error(400, "No data received")
+            return
+
+        webm_data = self.rfile.read(length)
+        WORK_DIR.mkdir(exist_ok=True)
+        temp_dir = WORK_DIR / uuid.uuid4().hex
+        temp_dir.mkdir()
+
+        try:
+            in_path = temp_dir / "input.webm"
+            out_path = temp_dir / "output.mp4"
+            in_path.write_bytes(webm_data)
+            print(f"[Convert] WebM {len(webm_data):,} bytes → MP4", flush=True)
+
+            subprocess.run(
+                [
+                    FFMPEG_PATH, "-y",
+                    "-i", str(in_path),
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                    "-c:a", "aac", "-b:a", "160k",
+                    "-movflags", "+faststart",   # 索引移至開頭，播放器快速開播
+                    str(out_path),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=300,
+            )
+
+            mp4_data = out_path.read_bytes()
+            print(f"[Convert] OK {len(mp4_data):,} bytes", flush=True)
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode("utf-8", errors="replace")
+            self.send_error(500, f"FFmpeg error: {stderr[-200:]}")
+            return
+        except Exception as exc:
+            self.send_error(500, f"Conversion failed: {exc}")
+            return
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "video/mp4")
+        self.send_header("Content-Length", str(len(mp4_data)))
+        self.end_headers()
+        self.wfile.write(mp4_data)
+
     def handle_tts(self):
+
         if urlparse(self.path).path != "/api/tts":
             self.send_error(404)
             return
