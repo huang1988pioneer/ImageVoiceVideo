@@ -552,8 +552,10 @@ async function generateVideo() {
       }, duration * 1000 + 350);
     };
     
-    // 不使用 timeslice，避免 WebM cluster 時間戳記誤差導致影音不同步
-    recorder.start();
+    // 使用 1000ms timeslice 讓 WebM 每秒產生一個 Cluster 邊界（SeekHead/Cue）
+    // 外部播放器（PotPlayer、VLC 等）需要 Cluster 邊界才能正確定位與播放
+    // Chrome MediaRecorder 的 timeslice chunk 時間戳為連續絕對值，不影響 A/V 同步
+    recorder.start(1000);
 
 
     await done;
