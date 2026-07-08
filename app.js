@@ -57,7 +57,8 @@ function resizeCanvasToImage(image) {
 function getSelectedTracks() {
   const checks = [...document.querySelectorAll(".track-check:checked")];
   const tracks = checks.map((check) => {
-    const gender = document.querySelector(`.track-gender[data-language="${check.value}"]`)?.value || "female";
+    const selectEl = document.querySelector(`.track-gender[data-language="${check.value}"]`);
+    const gender = selectEl ? selectEl.value : "male";
     return {
       language: check.value,
       gender,
@@ -65,7 +66,10 @@ function getSelectedTracks() {
     };
   });
 
-  return tracks.length ? tracks : [{ language: "zh-TW", gender: "female", label: "中" }];
+  if (tracks.length) return tracks;
+  // 沒有勾選任何語言時，讀取中文軌道的性別設定作為預設
+  const fallbackGender = document.querySelector('.track-gender[data-language="zh-TW"]')?.value || "male";
+  return [{ language: "zh-TW", gender: fallbackGender, label: "中" }];
 }
 
 function parseScriptLines(text) {
