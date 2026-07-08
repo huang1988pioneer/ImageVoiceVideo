@@ -373,16 +373,15 @@ async function buildAudio(audioContext, scriptLines, tracks) {
     throw new Error("直接開啟 HTML 時無法文字轉語音，請用 http://127.0.0.1:5180/ 開啟。");
   }
 
-  const trackBuffers = await Promise.all(
-    tracks.map(async (track) =>
-      Promise.all(
-        scriptLines.map(async (line) => {
-          const audioData = await createVoice(line.text, track, line.gender);
-          return audioContext.decodeAudioData(audioData.slice(0));
-        }),
-      ),
-    ),
-  );
+  const trackBuffers = [];
+  for (const track of tracks) {
+    const buffers = [];
+    for (const line of scriptLines) {
+      const audioData = await createVoice(line.text, track, line.gender);
+      buffers.push(await audioContext.decodeAudioData(audioData.slice(0)));
+    }
+    trackBuffers.push(buffers);
+  }
 
   const segmentDurations = scriptLines.map((_, lineIndex) =>
     Math.max(...trackBuffers.map((buffers) => buffers[lineIndex].duration), 0.4),
@@ -473,6 +472,7 @@ async function generateVideo() {
   try {
     const subtitleTracks = await buildSubtitleTracks(scriptLines, tracks);
     const audioContext = new AudioContext();
+    audioContext.suspend();
     const { destination, sources, segmentDurations, duration } = await buildAudio(audioContext, scriptLines, tracks);
 
     const canvasStream = canvas.captureStream(30);
@@ -515,6 +515,7 @@ async function generateVideo() {
     }
 
     drawFrame(0, subtitleTracks);
+    await audioContext.resume();
     recorder.start(250);
     // 記錄音訊開始的 audioContext 時間點，再排程所有音源
     audioStartTime = audioContext.currentTime;
