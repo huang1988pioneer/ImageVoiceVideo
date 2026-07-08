@@ -199,14 +199,26 @@ function getSelectedTracks() {
 function parseScriptLines(text) {
   return text
     .split(/\r?\n/)
-    .map((line) => {
+    .flatMap((line) => {
       const raw = line.trim();
+      if (!raw) return [];
+
+      // 提取行內性別標記（整行共用）
       const marker = raw.match(/[（(]\s*([男女])\s*[）)]/);
       const gender = marker ? (marker[1] === "男" ? "male" : "female") : null;
-      const text = raw.replace(/[（(]\s*[男女]\s*[）)]/, "").trim();
-      return { text, gender };
-    })
-    .filter((line) => line.text);
+      const clean = raw.replace(/[（(]\s*[男女]\s*[）)]/, "").trim();
+
+      // 含有「。」時以「。」分行，每句繼承同一性別標記
+      if (clean.includes("。")) {
+        return clean
+          .split("。")
+          .map((s) => s.trim())
+          .filter((s) => s)
+          .map((s) => ({ text: s, gender }));
+      }
+
+      return clean ? [{ text: clean, gender }] : [];
+    });
 }
 
 function lineAt(lines, activeIndex) {
