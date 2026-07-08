@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>有聲圖片影片生成器</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="workspace">
+        <div class="topbar">
+          <div>
+            <h1>有聲圖片影片生成器</h1>
+            <p>上傳圖片、輸入語音稿，產生可下載的多語有聲 WebM 影片。</p>
+          </div>
+          <button id="generateBtn" class="primary" type="button" disabled>生成影片</button>
+        </div>
+
+        <div class="panels">
+          <section class="panel input-panel" aria-label="輸入區">
+            <label class="dropzone" id="dropzone">
+              <input id="imageInput" type="file" accept="image/*" />
+              <span class="drop-title">選擇或拖放圖片</span>
+              <span class="drop-note">支援 JPG、PNG、WebP</span>
+            </label>
+
+            <label class="field">
+              <span>語音稿</span>
+              <textarea id="scriptInput" rows="10" placeholder="在行內加入（男）或（女）可指定該行聲音；未標註則使用下方選擇。"></textarea>
+            </label>
+
+            <div class="field">
+              <span>語音與字幕語言</span>
+              <div class="track-list">
+                <label class="track-option">
+                  <input class="track-check" type="checkbox" value="zh-TW" checked />
+                  <span>中文</span>
+                  <select class="track-gender" data-language="zh-TW">
+                    <option value="male">男聲</option>
+                    <option value="female">女聲</option>
+                  </select>
+                </label>
+
+                <label class="track-option">
+                  <input class="track-check" type="checkbox" value="en-US" />
+                  <span>英文</span>
+                  <select class="track-gender" data-language="en-US">
+                    <option value="male">男聲</option>
+                    <option value="female">女聲</option>
+                  </select>
+                </label>
+
+                <label class="track-option">
+                  <input class="track-check" type="checkbox" value="ja-JP" />
+                  <span>日文</span>
+                  <select class="track-gender" data-language="ja-JP">
+                    <option value="male">男聲</option>
+                    <option value="female">女聲</option>
+                  </select>
+                </label>
+
+                <label class="track-option">
+                  <input class="track-check" type="checkbox" value="yue-HK" />
+                  <span>粵語</span>
+                  <select class="track-gender" data-language="yue-HK">
+                    <option value="male">男聲</option>
+                    <option value="female">女聲</option>
+                  </select>
+                </label>
+
+                <label class="track-option">
+                  <input class="track-check" type="checkbox" value="ko-KR" />
+                  <span>韓語</span>
+                  <select class="track-gender" data-language="ko-KR">
+                    <option value="male">男聲</option>
+                    <option value="female">女聲</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <label class="field">
+              <span>旁白音檔</span>
+              <input id="audioInput" type="file" accept="audio/*" />
+            </label>
+
+            <div class="settings">
+              <label>
+                <span>語速</span>
+                <input id="rateInput" type="range" min="-5" max="5" value="0" />
+              </label>
+              <label>
+                <span>音量</span>
+                <input id="volumeInput" type="range" min="0" max="100" value="100" />
+              </label>
+            </div>
+          </section>
+
+          <section class="panel preview-panel" aria-label="預覽區">
+            <div class="media-row">
+              <canvas id="stage" width="1280" height="720"></canvas>
+              <video id="resultVideo" class="hidden" controls playsinline></video>
+            </div>
+            <div class="status-row">
+              <span id="status">請先上傳圖片並輸入語音稿。</span>
+              <a id="downloadLink" class="download hidden" download="有聲圖片影片.webm">下載影片</a>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

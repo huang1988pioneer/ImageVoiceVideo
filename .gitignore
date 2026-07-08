@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Runtime temp files
+.runtime/
+
+# Vendor (local packages)
+.vendor/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
