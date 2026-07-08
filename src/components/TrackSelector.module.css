@@ -1,0 +1,70 @@
+.wrapper { display: flex; flex-direction: column; gap: 10px; }
+
+.label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card {
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  transition: border-color 0.2s, background 0.2s;
+  overflow: hidden;
+  min-width: 70px;
+}
+
+.active {
+  border-color: rgba(20,184,166,0.6);
+  background: rgba(20,184,166,0.08);
+}
+
+.toggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: color 0.2s;
+}
+
+.active .toggleBtn { color: #5eead4; }
+
+.flag { font-size: 1.1rem; }
+.langLabel { font-weight: 600; flex: 1; }
+.check { color: #14b8a6; font-size: 0.75rem; }
+
+.genderRow {
+  display: flex;
+  border-top: 1px solid rgba(20,184,166,0.2);
+}
+
+.genderBtn {
+  flex: 1;
+  padding: 5px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: color 0.15s, background 0.15s;
+}
+
+.genderBtn:hover { background: rgba(20,184,166,0.1); color: #fff; }
+.genderActive { color: #14b8a6 !important; }

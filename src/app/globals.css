@@ -1,0 +1,169 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+/* ─── Reset ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── Design Tokens ─────────────────────────────────── */
+:root {
+  --bg-base:      #090e1a;
+  --bg-surface:   rgba(255,255,255,0.04);
+  --bg-elevated:  rgba(255,255,255,0.07);
+  --border:       rgba(255,255,255,0.09);
+  --border-teal:  rgba(20,184,166,0.35);
+  --teal:         #14b8a6;
+  --teal-light:   #5eead4;
+  --teal-dark:    #0f766e;
+  --text:         rgba(255,255,255,0.90);
+  --text-muted:   rgba(255,255,255,0.45);
+  --radius-lg:    18px;
+  --radius-md:    12px;
+  --shadow:       0 4px 32px rgba(0,0,0,0.4);
+}
+
+/* ─── Base ──────────────────────────────────────────── */
+html, body {
+  height: 100%;
+  font-family: 'Inter', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  background: var(--bg-base);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+/* Animated gradient background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 0% 0%,  rgba(20,184,166,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 100% 100%, rgba(14,116,144,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 70% at 50% 50%, rgba(6,182,212,0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
+
+/* ─── Status Bar ────────────────────────────────────── */
+.status-bar {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s;
+}
+
+.status-bar.recording {
+  border-color: var(--border-teal);
+  color: var(--teal-light);
+  background: rgba(20,184,166,0.06);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+  flex-shrink: 0;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* ─── Generate Button ───────────────────────────────── */
+.generate-btn {
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: linear-gradient(135deg, #0f766e 0%, #0891b2 100%);
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(14,116,144,0.35);
+}
+
+.generate-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(14,116,144,0.45);
+}
+
+.generate-btn:active:not(:disabled) { transform: translateY(0); }
+
+.generate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(255,255,255,0.1);
+  box-shadow: none;
+}
+
+/* ripple */
+.generate-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.generate-btn:active::after { opacity: 1; }
+
+/* ─── Card ──────────────────────────────────────────── */
+.card {
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+/* ─── Section Label ─────────────────────────────────── */
+.section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 12px;
+}
+
+/* ─── Divider ───────────────────────────────────────── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 6px 0;
+}
+
+/* ─── Canvas ────────────────────────────────────────── */
+.preview-canvas {
+  width: 100%;
+  aspect-ratio: 9/16;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: #111;
+  display: block;
+  object-fit: contain;
+}
