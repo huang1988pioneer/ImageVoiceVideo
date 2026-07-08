@@ -179,6 +179,41 @@ select {
   gap: 8px;
 }
 
+.filename-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.filename-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  padding: 0 10px;
+  height: 40px;
+  background: transparent;
+  outline: none;
+  color: var(--ink);
+}
+
+.filename-ext {
+  flex-shrink: 0;
+  padding: 0 12px;
+  height: 40px;
+  line-height: 40px;
+  background: #f0f3f1;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .track-list {
   display: grid;
   gap: 8px;
