@@ -474,7 +474,10 @@ async function generateVideo() {
   try {
     const subtitleTracks = await buildSubtitleTracks(scriptLines, tracks);
     const audioContext = new AudioContext();
-    audioContext.suspend();
+    // 必須 await，確保 AudioContext 時鐘在 TTS 生成期間真正暫停
+    // 若不 await，currentTime 在 buildAudio 的數秒等待中繼續增加，
+    // 導致 audioStartTime 偏移，WebM 音視訊時間戳相差數秒
+    await audioContext.suspend();
     const { destination, sources, segmentDurations, duration } = await buildAudio(audioContext, scriptLines, tracks);
 
     const canvasStream = canvas.captureStream(30);
