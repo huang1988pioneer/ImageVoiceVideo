@@ -497,11 +497,12 @@ async function generateVideo() {
       recorder.onstop = resolve;
     });
 
-    const startTime = performance.now();
     let animationFrame = 0;
+    let audioStartTime = 0;
 
-    function animate(now) {
-      const elapsed = (now - startTime) / 1000;
+    function animate() {
+      // 使用 audioContext.currentTime 與音訊同步，消除計時器偏差
+      const elapsed = audioContext.currentTime - audioStartTime;
       const progress = Math.min(1, elapsed / duration);
       const lineIndex = activeLineIndex(elapsed, segmentDurations);
       drawFrame(lineIndex, subtitleTracks);
@@ -513,13 +514,16 @@ async function generateVideo() {
 
     drawFrame(0, subtitleTracks);
     recorder.start(250);
-    sources.forEach(({ source, startAt }) => source.start(audioContext.currentTime + startAt));
+    // 記錄音訊開始的 audioContext 時間點，再排程所有音源
+    audioStartTime = audioContext.currentTime;
+    sources.forEach(({ source, startAt }) => source.start(audioStartTime + startAt));
     animationFrame = requestAnimationFrame(animate);
     setTimeout(() => {
       cancelAnimationFrame(animationFrame);
       drawFrame(scriptLines.length - 1, subtitleTracks);
       recorder.stop();
     }, duration * 1000 + 350);
+
 
     await done;
     await audioContext.close();
