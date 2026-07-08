@@ -65,6 +65,7 @@ class Handler(SimpleHTTPRequestHandler):
             payload = self.read_json()
             lines = payload.get("lines", [])
             language = str(payload.get("language", "zh-TW"))
+            source_language = str(payload.get("source_language", "zh-TW"))
         except Exception:
             self.send_error(400, "Invalid JSON")
             return
@@ -105,6 +106,7 @@ class Handler(SimpleHTTPRequestHandler):
             gender = str(payload.get("gender", "female"))
             rate = int(payload.get("rate", 0))
             volume = int(payload.get("volume", 100))
+            skip_translate = bool(payload.get("skip_translate", False))
         except Exception:
             self.send_error(400, "Invalid JSON")
             return
@@ -125,7 +127,7 @@ class Handler(SimpleHTTPRequestHandler):
         temp_dir.mkdir()
 
         try:
-            data, mime_type = self.create_voice(text, language, gender, rate, volume, temp_dir)
+            data, mime_type = self.create_voice(text, language, gender, rate, volume, temp_dir, skip_translate)
         except subprocess.TimeoutExpired:
             self.send_error(504, "Voice generation timed out")
             return
@@ -141,9 +143,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def create_voice(self, text, language, gender, rate, volume, temp_dir):
+    def create_voice(self, text, language, gender, rate, volume, temp_dir, skip_translate=False):
         try:
-            return self.create_edge_voice(text, language, gender, rate, volume, temp_dir)
+            return self.create_edge_voice(text, language, gender, rate, volume, temp_dir, skip_translate)
         except Exception as edge_error:
             try:
                 return self.create_windows_voice(text, rate, volume, temp_dir)
@@ -153,7 +155,7 @@ class Handler(SimpleHTTPRequestHandler):
                     f"Edge TTS: {edge_error}; Windows TTS: {windows_error}"
                 ) from windows_error
 
-    def create_edge_voice(self, text, language, gender, rate, volume, temp_dir):
+    def create_edge_voice(self, text, language, gender, rate, volume, temp_dir, skip_translate=False):
         import edge_tts
 
         mp3_path = temp_dir / "voice.mp3"
@@ -161,8 +163,9 @@ class Handler(SimpleHTTPRequestHandler):
         volume_percent = volume - 100
         voice_config = VOICE_MAP[language]
         voice_name = voice_config[gender]
-        spoken_text = self.translate_text(text, voice_config["translate"])
-        print(f"[TTS] lang={language} gender={gender} voice={voice_name} rate={rate_percent:+d}% volume={volume_percent:+d}%", flush=True)
+        # 語音稿語言與軌道相同時跳過翻譯，直接使用原文
+        spoken_text = text if skip_translate else self.translate_text(text, voice_config["translate"])
+        print(f"[TTS] lang={language} gender={gender} voice={voice_name} skip_translate={skip_translate} rate={rate_percent:+d}%", flush=True)
         communicate = edge_tts.Communicate(
             spoken_text,
             voice_name,

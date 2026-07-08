@@ -1,6 +1,7 @@
 const imageInput = document.querySelector("#imageInput");
 const audioInput = document.querySelector("#audioInput");
 const scriptInput = document.querySelector("#scriptInput");
+const scriptLang = document.querySelector("#scriptLang");
 const rateInput = document.querySelector("#rateInput");
 const volumeInput = document.querySelector("#volumeInput");
 const generateBtn = document.querySelector("#generateBtn");
@@ -312,21 +313,27 @@ async function postJson(path, payload) {
 }
 
 async function createVoice(text, track, gender) {
+  const sourceLang = scriptLang?.value || "zh-TW";
+  const skipTranslate = sourceLang === track.language;
   const response = await postJson("/api/tts", {
     text,
     language: track.language,
     gender: gender || track.gender,
     rate: Number(rateInput.value),
     volume: Number(volumeInput.value),
+    skip_translate: skipTranslate,
   });
   return response.arrayBuffer();
 }
 
 async function translateLines(lines, track) {
-  if (track.language === "zh-TW") return lines;
+  const sourceLang = scriptLang?.value || "zh-TW";
+  // 語音稿語言與軌道語言相同，跳過翻譯
+  if (sourceLang === track.language) return lines;
   const response = await postJson("/api/translate", {
     lines,
     language: track.language,
+    source_language: sourceLang,
   });
   const payload = await response.json();
   return payload.lines || lines;

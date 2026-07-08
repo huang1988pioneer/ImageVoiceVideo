@@ -41,8 +41,19 @@
 
             <label class="field">
               <span>語音稿</span>
-              <textarea id="scriptInput" rows="10" placeholder="在行內加入（男）或（女）可指定該行聲音；未標註則使用下方選擇。"></textarea>
+              <textarea id="scriptInput" rows="10" placeholder="未標註則依下方性別選擇發音；可加（男）/（女）指定單行聲音。"></textarea>
             </label>
+
+            <div class="field">
+              <span>語音稿語言</span>
+              <select id="scriptLang">
+                <option value="zh-TW">中文（預設）</option>
+                <option value="en-US">英語</option>
+                <option value="ja-JP">日語</option>
+                <option value="yue-HK">粤語</option>
+                <option value="ko-KR">韓語</option>
+              </select>
+            </div>
 
             <div class="field">
               <span>語音與字幕語言</span>
