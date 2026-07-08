@@ -555,6 +555,27 @@ dropzone.addEventListener("drop", (event) => {
   if (file?.type.startsWith("image/")) loadImage(file);
 });
 
+// 語音稿語言變更時，自動勾選對應的語音音軌（取消舊的自動勾選）
+let autoCheckedLang = "zh-TW"; // 記錄上次由腳本自動勾選的語言
+
+function syncTrackToScriptLang() {
+  const newLang = scriptLang?.value || "zh-TW";
+  if (newLang === autoCheckedLang) return;
+
+  // 取消舊的自動勾選（只有在沒有手動添加其他語言時才取消）
+  const oldCheck = document.querySelector(`.track-check[value="${autoCheckedLang}"]`);
+  if (oldCheck) oldCheck.checked = false;
+
+  // 勾選新語言對應的音軌
+  const newCheck = document.querySelector(`.track-check[value="${newLang}"]`);
+  if (newCheck) newCheck.checked = true;
+
+  autoCheckedLang = newLang;
+  updateGenerateState();
+}
+
+scriptLang?.addEventListener("change", syncTrackToScriptLang);
+
 if (isFilePage) {
   setStatus("目前是直接開啟 HTML。可上傳旁白音檔生成影片；文字轉語音需用 http://127.0.0.1:5180/ 開啟。");
 } else {
