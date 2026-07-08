@@ -613,3 +613,15 @@ if (isFilePage) {
 
 drawFrame(0, []);
 initRestoreBar();
+
+// 檢查瀏覽器是否支援 MP4 錄製，若不支援則調整選單
+const mp4Supported = MediaRecorder.isTypeSupported("video/mp4");
+if (!mp4Supported) {
+  const mp4Option = document.querySelector('#formatSelect option[value="mp4"]');
+  if (mp4Option) {
+    mp4Option.textContent = "MP4（您的瀏覽器不支援）";
+    mp4Option.disabled = true;
+    formatSelect.value = "webm";
+  }
+}
+
