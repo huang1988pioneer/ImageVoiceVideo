@@ -11,7 +11,130 @@ const dropzone = document.querySelector("#dropzone");
 const canvas = document.querySelector("#stage");
 const ctx = canvas.getContext("2d");
 
+// ── 暫存：IndexedDB（圖片 Blob）+ localStorage（語音稿）───────────────────
+const CACHE_DB = "ivv-cache";
+const CACHE_STORE = "data";
+
+function openCacheDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(CACHE_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(CACHE_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function cacheSet(key, value) {
+  const db = await openCacheDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CACHE_STORE, "readwrite");
+    tx.objectStore(CACHE_STORE).put(value, key);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function cacheGet(key) {
+  const db = await openCacheDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CACHE_STORE, "readonly");
+    const req = tx.objectStore(CACHE_STORE).get(key);
+    req.onsuccess = () => resolve(req.result ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function cacheDel(...keys) {
+  const db = await openCacheDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CACHE_STORE, "readwrite");
+    keys.forEach((k) => tx.objectStore(CACHE_STORE).delete(k));
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// 自動儲存圖片
+async function saveImageCache(blob, name) {
+  try {
+    await cacheSet("image-blob", blob);
+    await cacheSet("image-name", name);
+  } catch (_) { /* 如果儲存失敗不影響主要功能 */ }
+}
+
+// 自動儲存語音稿（防抖 500ms）
+let scriptSaveTimer = null;
+function scheduleScriptSave() {
+  clearTimeout(scriptSaveTimer);
+  scriptSaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem("ivv-script", scriptInput.value);
+    } catch (_) {}
+  }, 500);
+}
+
+// ── 恢復列初始化 ──────────────────────────────────────────
+const restoreBar = document.querySelector("#restoreBar");
+const restoreMsg = document.querySelector("#restoreMsg");
+const restoreImageBtn = document.querySelector("#restoreImageBtn");
+const restoreScriptBtn = document.querySelector("#restoreScriptBtn");
+const clearCacheBtn = document.querySelector("#clearCacheBtn");
+const dismissRestoreBtn = document.querySelector("#dismissRestoreBtn");
+
+async function initRestoreBar() {
+  try {
+    const [imageBlob, imageName, savedScript] = await Promise.all([
+      cacheGet("image-blob"),
+      cacheGet("image-name"),
+      Promise.resolve(localStorage.getItem("ivv-script")),
+    ]);
+
+    const hasImage = !!imageBlob;
+    const hasScript = !!savedScript;
+    if (!hasImage && !hasScript) return;
+
+    // 建構提示訊息
+    const parts = [];
+    if (hasImage) parts.push(`圖片「${imageName || "未命名"}」`);
+    if (hasScript) parts.push("語音稿");
+    restoreMsg.textContent = `上次暫存：${parts.join("、")}`;
+
+    if (hasImage) {
+      restoreImageBtn.classList.remove("hidden");
+      restoreImageBtn.addEventListener("click", async () => {
+        const blob = await cacheGet("image-blob");
+        const name = (await cacheGet("image-name")) || "cached-image";
+        if (blob) {
+          const file = new File([blob], name, { type: blob.type });
+          await loadImage(file);
+        }
+      });
+    }
+
+    if (hasScript) {
+      restoreScriptBtn.classList.remove("hidden");
+      restoreScriptBtn.addEventListener("click", () => {
+        scriptInput.value = savedScript;
+        updateGenerateState();
+      });
+    }
+
+    clearCacheBtn.addEventListener("click", async () => {
+      await cacheDel("image-blob", "image-name");
+      localStorage.removeItem("ivv-script");
+      restoreBar.classList.add("hidden");
+    });
+
+    dismissRestoreBtn.addEventListener("click", () => {
+      restoreBar.classList.add("hidden");
+    });
+
+    restoreBar.classList.remove("hidden");
+  } catch (_) { /* IndexedDB 不支援時靜默失敗 */ }
+}
+
 const isFilePage = window.location.protocol === "file:";
+
 const languageLabels = {
   "zh-TW": "中",
   "en-US": "EN",
@@ -169,6 +292,9 @@ async function loadImage(file) {
   drawFrame(0, []);
   setStatus(`已載入圖片：${file.name}`);
   updateGenerateState();
+
+  // 將圖片存入 IndexedDB
+  saveImageCache(file, file.name);
 }
 
 async function postJson(path, payload) {
@@ -397,7 +523,10 @@ audioInput.addEventListener("change", () => {
   updateGenerateState();
 });
 
-scriptInput.addEventListener("input", updateGenerateState);
+scriptInput.addEventListener("input", () => {
+  updateGenerateState();
+  scheduleScriptSave();
+});
 generateBtn.addEventListener("click", generateVideo);
 
 for (const eventName of ["dragenter", "dragover"]) {
@@ -426,3 +555,4 @@ if (isFilePage) {
 }
 
 drawFrame(0, []);
+initRestoreBar();

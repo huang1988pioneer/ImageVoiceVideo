@@ -19,6 +19,20 @@
 
         <div class="panels">
           <section class="panel input-panel" aria-label="輸入區">
+          <!-- 上次暫存提示列 -->
+            <div id="restoreBar" class="restore-bar hidden">
+              <div class="restore-info">
+                <span class="restore-icon">🕐</span>
+                <span id="restoreMsg">偵測到上次使用的內容</span>
+              </div>
+              <div class="restore-btns">
+                <button id="restoreImageBtn" class="btn-restore hidden" type="button">恢復圖片</button>
+                <button id="restoreScriptBtn" class="btn-restore hidden" type="button">恢復語音稿</button>
+                <button id="clearCacheBtn" class="btn-restore-clear" type="button">清除</button>
+                <button id="dismissRestoreBtn" class="btn-restore-dismiss" type="button" aria-label="關閉">✕</button>
+              </div>
+            </div>
+
             <label class="dropzone" id="dropzone">
               <input id="imageInput" type="file" accept="image/*" />
               <span class="drop-title">選擇或拖放圖片</span>
