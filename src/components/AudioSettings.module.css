@@ -1,7 +1,7 @@
 .wrapper {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .sectionLabel {
@@ -10,9 +10,9 @@
 
 .row {
   display: grid;
-  grid-template-columns: 88px 1fr;
+  grid-template-columns: 72px 1fr;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .label {

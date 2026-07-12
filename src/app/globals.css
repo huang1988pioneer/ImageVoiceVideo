@@ -96,13 +96,13 @@ body::after {
 .section-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.72rem;
+  gap: 7px;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  margin: 0 0 14px;
+  letter-spacing: 0.12em;
+  margin: 0 0 10px;
 }
 
 .section-label::before {
@@ -203,12 +203,9 @@ body::after {
   filter: none;
 }
 
-/* ─── Canvas preview ────────────────────────────────── */
+/* ─── Canvas preview (size driven by layout max-height) ─ */
 .preview-canvas {
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md, 12px);
   border: 1px solid var(--border);
   background: linear-gradient(145deg, #0c1220 0%, #111827 100%);
   display: block;

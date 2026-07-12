@@ -29,6 +29,8 @@ export interface RecordingResult {
   duration: number;
 }
 
+type CanvasCaptureTrack = MediaStreamTrack & { requestFrame?: () => void };
+
 function chooseMime(fmt: string): { mimeType: string; ext: string } {
   if (fmt === 'mp4') {
     const mp4Types = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'];
@@ -48,67 +50,119 @@ function resolveGender(line: ScriptLine, track: Track): Gender {
   return line.gender ?? track.gender;
 }
 
+function stopTracks(stream: MediaStream | null | undefined, kinds?: Array<'audio' | 'video'>) {
+  if (!stream) return;
+  for (const track of stream.getTracks()) {
+    if (kinds && !kinds.includes(track.kind as 'audio' | 'video')) continue;
+    try {
+      track.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Obtain a live canvas capture stream.
+ * Reuses a previous stream if its video track is still live; otherwise creates a new one.
+ * Stopping canvas tracks between runs can break re-capture in some browsers — we prefer reuse.
+ */
+function acquireCanvasStream(
+  canvas: HTMLCanvasElement,
+  existing: MediaStream | null,
+): MediaStream {
+  if (existing) {
+    const live = existing.getVideoTracks().some(t => t.readyState === 'live');
+    if (live) return existing;
+    stopTracks(existing);
+  }
+  return canvas.captureStream(30);
+}
+
+function requestCanvasFrame(stream: MediaStream) {
+  const track = stream.getVideoTracks()[0] as CanvasCaptureTrack | undefined;
+  if (track?.requestFrame) {
+    try {
+      track.requestFrame();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export function useVideoRecorder(onStatus: (msg: string) => void) {
   const abortRef = useRef(false);
+  const busyRef = useRef(false);
+  /** Persist canvas capture stream across runs so we can generate repeatedly without refresh */
+  const canvasStreamRef = useRef<MediaStream | null>(null);
   const { drawFrame } = useCanvasRenderer();
 
   const record = useCallback(async (opts: RecordingOptions): Promise<RecordingResult> => {
+    if (busyRef.current) {
+      throw new Error('正在生成中，請稍候');
+    }
+    busyRef.current = true;
+    abortRef.current = false;
+
     const {
       scriptLines, tracks, image, canvas,
       format, rate, volume, scriptLanguage,
     } = opts;
-    abortRef.current = false;
 
     const { mimeType, ext } = chooseMime(format);
     let currentExt = ext;
 
-    // ── 1. Build spoken text + subtitle tracks (translate once) ──
-    onStatus('正在翻譯字幕…');
-    const spokenByTrack: string[][] = [];
-    const allSubtitleTracks: SubtitleLine[][] = [];
-
-    for (const track of tracks) {
-      let spoken: string[];
-      if (track.language === scriptLanguage) {
-        spoken = scriptLines.map(l => l.text);
-      } else {
-        spoken = await fetchTranslate(
-          scriptLines.map(l => l.text),
-          track.language,
-          scriptLanguage,
-        );
-      }
-      spokenByTrack.push(spoken);
-      allSubtitleTracks.push(
-        spoken.map(text => ({
-          text,
-          startAt: 0,
-          endAt: 0,
-          language: track.language,
-        })),
-      );
-    }
-
-    // ── 2. Build audio (TTS for each line × each track) ──────────
-    onStatus('正在生成語音…');
-    const audioContext = new AudioContext();
-    // Object bag so TS control-flow analysis doesn't collapse these to `null`/`never`
-    const resources: { worker: Worker | null; workerUrl: string | null } = {
+    let audioContext: AudioContext | null = null;
+    let destination: MediaStreamAudioDestinationNode | null = null;
+    let mixedStream: MediaStream | null = null;
+    let recorder: MediaRecorder | null = null;
+    const resources: { worker: Worker | null; workerUrl: string | null; timer: ReturnType<typeof setTimeout> | null } = {
       worker: null,
       workerUrl: null,
+      timer: null,
     };
 
     try {
+      // ── 1. Build spoken text + subtitle tracks ─────────────────
+      onStatus('正在翻譯字幕…');
+      const spokenByTrack: string[][] = [];
+      const allSubtitleTracks: SubtitleLine[][] = [];
+
+      for (const track of tracks) {
+        let spoken: string[];
+        if (track.language === scriptLanguage) {
+          spoken = scriptLines.map(l => l.text);
+        } else {
+          spoken = await fetchTranslate(
+            scriptLines.map(l => l.text),
+            track.language,
+            scriptLanguage,
+          );
+        }
+        spokenByTrack.push(spoken);
+        allSubtitleTracks.push(
+          spoken.map(text => ({
+            text,
+            startAt: 0,
+            endAt: 0,
+            language: track.language,
+          })),
+        );
+      }
+
+      // ── 2. Build audio (TTS) ────────────────────────────────────
+      onStatus('正在生成語音…');
+      audioContext = new AudioContext();
       await audioContext.suspend();
-      const destination = audioContext.createMediaStreamDestination();
+      destination = audioContext.createMediaStreamDestination();
 
-      // Lower gain when multiple language tracks play together
       const gainValue = Math.min(0.85, 1 / Math.sqrt(Math.max(tracks.length, 1)));
-
       const segmentDurations: number[] = new Array(scriptLines.length).fill(0);
       const allSources: { source: AudioBufferSourceNode; startAt: number }[] = [];
-
-      // Generate TTS track-by-track so we can pan multi-language audio
       const trackBuffers: AudioBuffer[][] = [];
 
       for (let t = 0; t < tracks.length; t++) {
@@ -122,6 +176,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
           const gender = resolveGender(scriptLines[i], track);
           const ab = await fetchTTS(spoken[i], track.language, gender, rate, volume);
+          // slice so the buffer can be decoded even if the original is detached
           const audioBuf = await audioContext.decodeAudioData(ab.slice(0));
           buffers.push(audioBuf);
         }
@@ -133,26 +188,26 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         segmentDurations[i] = maxDur + 0.2;
       }
 
-      const segmentStarts = segmentDurations.reduce<number[]>((starts, dur, idx) => {
+      const segmentStarts = segmentDurations.reduce<number[]>((starts, _dur, idx) => {
         starts.push(idx === 0 ? 0 : starts[idx - 1] + segmentDurations[idx - 1]);
         return starts;
       }, []);
 
       trackBuffers.forEach((buffers, trackIndex) => {
         buffers.forEach((buffer, lineIndex) => {
-          const source = audioContext.createBufferSource();
+          const source = audioContext!.createBufferSource();
           source.buffer = buffer;
 
-          const gain = audioContext.createGain();
+          const gain = audioContext!.createGain();
           gain.gain.value = gainValue;
 
-          if (audioContext.createStereoPanner && tracks.length > 1) {
-            const panner = audioContext.createStereoPanner();
+          if (tracks.length > 1 && typeof audioContext!.createStereoPanner === 'function') {
+            const panner = audioContext!.createStereoPanner();
             panner.pan.value =
               -0.85 + (1.7 * trackIndex) / Math.max(tracks.length - 1, 1);
-            source.connect(gain).connect(panner).connect(destination);
+            source.connect(gain).connect(panner).connect(destination!);
           } else {
-            source.connect(gain).connect(destination);
+            source.connect(gain).connect(destination!);
           }
 
           allSources.push({ source, startAt: segmentStarts[lineIndex] });
@@ -161,7 +216,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       const totalDuration = segmentDurations.reduce((a, b) => a + b, 0);
 
-      // Fill subtitle timing
       let cumTime = 0;
       for (let i = 0; i < scriptLines.length; i++) {
         for (const trackSubs of allSubtitleTracks) {
@@ -172,79 +226,184 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       }
       const flatSubtitles = allSubtitleTracks.flat();
 
-      // ── 3. Set up canvas stream + MediaRecorder ──────────────────
-      const canvasStream = canvas.captureStream(30);
-      const mixedStream = new MediaStream([
-        ...canvasStream.getTracks(),
-        ...destination.stream.getTracks(),
+      // ── 3. Canvas stream + MediaRecorder ────────────────────────
+      // Draw a fresh frame before capture so the first encoded frame is valid
+      drawFrame(canvas, image, flatSubtitles, 0);
+
+      const canvasStream = acquireCanvasStream(canvas, canvasStreamRef.current);
+      canvasStreamRef.current = canvasStream;
+      requestCanvasFrame(canvasStream);
+
+      const videoTracks = canvasStream.getVideoTracks().filter(t => t.readyState === 'live');
+      if (videoTracks.length === 0) {
+        // Last resort: force a brand-new capture stream
+        stopTracks(canvasStreamRef.current);
+        canvasStreamRef.current = canvas.captureStream(30);
+        requestCanvasFrame(canvasStreamRef.current);
+      }
+
+      const liveCanvas = canvasStreamRef.current!;
+      const liveVideo = liveCanvas.getVideoTracks().filter(t => t.readyState === 'live');
+      if (liveVideo.length === 0) {
+        throw new Error('無法擷取畫面，請重新整理後再試');
+      }
+
+      mixedStream = new MediaStream([
+        ...liveVideo,
+        ...destination.stream.getAudioTracks(),
       ]);
 
       const chunks: Blob[] = [];
-      const recorder = new MediaRecorder(mixedStream, { mimeType });
-      recorder.ondataavailable = e => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      // ── 4. Record ─────────────────────────────────────────────────
-      onStatus('正在錄製影片…');
-      let audioStartTime = 0;
-
-      await new Promise<void>((resolve, reject) => {
-        recorder.onerror = () => reject(new Error('MediaRecorder error'));
-
-        recorder.onstart = () => {
-          void audioContext.resume();
-          audioStartTime = audioContext.currentTime;
-
-          allSources.forEach(({ source, startAt }) => {
-            source.start(audioStartTime + startAt);
-          });
-
-          const workerCode = `
-            let timer;
-            self.onmessage = e => {
-              if (e.data === 'start') timer = setInterval(() => self.postMessage('tick'), 33);
-              if (e.data === 'stop')  { clearInterval(timer); self.close(); }
-            };
-          `;
-          resources.workerUrl = URL.createObjectURL(
-            new Blob([workerCode], { type: 'text/javascript' }),
-          );
-          resources.worker = new Worker(resources.workerUrl);
-
-          resources.worker.onmessage = () => {
-            const elapsed = audioContext.currentTime - audioStartTime;
-            const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
-            onStatus(`正在錄製影片 ${pct}%…`);
-            drawFrame(canvas, image, flatSubtitles, elapsed);
-          };
-          resources.worker.postMessage('start');
-
-          setTimeout(() => {
-            resources.worker?.postMessage('stop');
-            drawFrame(canvas, image, flatSubtitles, Math.max(0, totalDuration - 0.01));
-            recorder.stop();
-          }, totalDuration * 1000 + 350);
-        };
-
-        recorder.onstop = () => resolve();
-        recorder.start(1000);
-      });
-
-      // Stop canvas/audio tracks so the tab recording indicator clears
-      mixedStream.getTracks().forEach(t => t.stop());
-      canvasStream.getTracks().forEach(t => t.stop());
-
-      // ── 5. Fix WebM duration & optionally convert ─────────────────
-      let blob = new Blob(chunks, { type: mimeType });
-
-      if (currentExt === 'webm' && typeof ysFixWebmDuration !== 'undefined') {
-        blob = await new Promise<Blob>(res =>
-          ysFixWebmDuration(blob, totalDuration * 1000, res),
-        );
+      try {
+        recorder = new MediaRecorder(mixedStream, { mimeType });
+      } catch {
+        // Fallback if codec combination is rejected mid-session
+        recorder = new MediaRecorder(mixedStream);
+        currentExt = 'webm';
       }
 
-      if (format === 'mp4' && currentExt === 'webm') {
+      recorder.ondataavailable = e => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      onStatus('正在錄製影片…');
+      let audioStartTime = 0;
+      const ctx = audioContext;
+      const rec = recorder;
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const finish = (err?: Error) => {
+          if (settled) return;
+          settled = true;
+          if (resources.timer) {
+            clearTimeout(resources.timer);
+            resources.timer = null;
+          }
+          if (err) reject(err);
+          else resolve();
+        };
+
+        // Hard timeout: start + duration + buffer, never hang forever
+        const hardMs = Math.ceil(totalDuration * 1000) + 15_000;
+        resources.timer = setTimeout(() => {
+          try {
+            if (rec.state === 'recording') rec.stop();
+          } catch {
+            /* ignore */
+          }
+          finish(new Error('錄製逾時，請再試一次'));
+        }, hardMs);
+
+        rec.onerror = () => finish(new Error('MediaRecorder 發生錯誤'));
+
+        rec.onstop = () => finish();
+
+        rec.onstart = () => {
+          void ctx.resume().then(() => {
+            audioStartTime = ctx.currentTime;
+
+            for (const { source, startAt } of allSources) {
+              try {
+                source.start(audioStartTime + startAt);
+              } catch (e) {
+                console.warn('source.start failed', e);
+              }
+            }
+
+            const workerCode = `
+              let timer;
+              self.onmessage = e => {
+                if (e.data === 'start') timer = setInterval(() => self.postMessage('tick'), 33);
+                if (e.data === 'stop')  { clearInterval(timer); self.close(); }
+              };
+            `;
+            resources.workerUrl = URL.createObjectURL(
+              new Blob([workerCode], { type: 'text/javascript' }),
+            );
+            resources.worker = new Worker(resources.workerUrl);
+
+            resources.worker.onmessage = () => {
+              const elapsed = ctx.currentTime - audioStartTime;
+              const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
+              onStatus(`正在錄製影片 ${pct}%…`);
+              drawFrame(canvas, image, flatSubtitles, elapsed);
+              requestCanvasFrame(liveCanvas);
+            };
+            resources.worker.postMessage('start');
+
+            setTimeout(() => {
+              try {
+                resources.worker?.postMessage('stop');
+              } catch {
+                /* ignore */
+              }
+              drawFrame(canvas, image, flatSubtitles, Math.max(0, totalDuration - 0.01));
+              requestCanvasFrame(liveCanvas);
+              // Let the last frame flush into the encoder
+              setTimeout(() => {
+                try {
+                  if (rec.state === 'recording' || rec.state === 'paused') {
+                    rec.stop();
+                  } else if (!settled) {
+                    finish();
+                  }
+                } catch (e) {
+                  finish(e instanceof Error ? e : new Error(String(e)));
+                }
+              }, 80);
+            }, totalDuration * 1000 + 300);
+          }).catch(err => {
+            finish(err instanceof Error ? err : new Error(String(err)));
+          });
+        };
+
+        try {
+          // timeslice helps some browsers flush data reliably across multiple runs
+          rec.start(250);
+        } catch (e) {
+          finish(e instanceof Error ? e : new Error(String(e)));
+        }
+
+        // If onstart never fires (broken stream), fail fast
+        setTimeout(() => {
+          if (!settled && rec.state === 'inactive') {
+            finish(new Error('無法開始錄製，請再試一次'));
+          }
+        }, 4000);
+      });
+
+      // Brief pause so final cluster is delivered
+      await sleep(50);
+
+      // ── 4. Stop only AUDIO tracks from this run ────────────────
+      // Keep canvas video track LIVE so the next generation can reuse captureStream.
+      stopTracks(destination.stream, ['audio']);
+      // Also stop any audio that was added onto mixedStream (same tracks)
+      if (mixedStream) {
+        for (const t of mixedStream.getAudioTracks()) {
+          try { t.stop(); } catch { /* ignore */ }
+        }
+      }
+
+      // ── 5. Fix WebM duration & optionally convert ──────────────
+      if (chunks.length === 0) {
+        throw new Error('錄製結果為空，請再試一次');
+      }
+
+      let blob = new Blob(chunks, { type: rec.mimeType || mimeType });
+
+      if ((currentExt === 'webm' || blob.type.includes('webm')) && typeof ysFixWebmDuration !== 'undefined') {
+        blob = await new Promise<Blob>(res => {
+          try {
+            ysFixWebmDuration(blob, totalDuration * 1000, res);
+          } catch {
+            res(blob);
+          }
+        });
+      }
+
+      if (format === 'mp4' && (currentExt === 'webm' || blob.type.includes('webm'))) {
         onStatus('正在轉換為 MP4…');
         try {
           const mp4 = await fetchConvert(blob);
@@ -253,22 +412,42 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             currentExt = 'mp4';
           } else {
             onStatus('FFmpeg 未安裝，保留 WebM 格式。');
+            currentExt = 'webm';
           }
         } catch (e) {
           console.warn('MP4 conversion failed:', e);
           onStatus('MP4 轉換失敗，保留 WebM 格式。');
+          currentExt = 'webm';
         }
       }
 
       return { blob, ext: currentExt, duration: totalDuration };
     } finally {
-      resources.worker?.terminate();
-      if (resources.workerUrl) URL.revokeObjectURL(resources.workerUrl);
+      // Always release one-shot resources so the next run can start cleanly
+      if (resources.timer) clearTimeout(resources.timer);
       try {
-        await audioContext.close();
+        resources.worker?.terminate();
       } catch {
-        /* already closed */
+        /* ignore */
       }
+      if (resources.workerUrl) URL.revokeObjectURL(resources.workerUrl);
+
+      // If canvas track died, clear ref so next run recreates it
+      const cs = canvasStreamRef.current;
+      if (cs && !cs.getVideoTracks().some(t => t.readyState === 'live')) {
+        stopTracks(cs);
+        canvasStreamRef.current = null;
+      }
+
+      if (audioContext) {
+        try {
+          await audioContext.close();
+        } catch {
+          /* already closed */
+        }
+      }
+
+      busyRef.current = false;
     }
   }, [drawFrame, onStatus]);
 

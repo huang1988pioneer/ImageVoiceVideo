@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════
-   Layout: Desktop (≥1100) → Tablet (700–1099) → Mobile (<700)
+   Layout priority: PREVIEW first, compact editor controls
+   Desktop (≥1100) → Tablet (700–1099) → Mobile (<700)
    ═══════════════════════════════════════════════════════ */
 
 .main {
@@ -7,7 +8,7 @@
   z-index: 1;
   min-height: 100vh;
   min-height: 100dvh;
-  padding-bottom: calc(40px + var(--dock-h));
+  padding-bottom: calc(28px + var(--dock-h));
 }
 
 /* ── Header ───────────────────────────────────────────── */
@@ -26,9 +27,9 @@
 
 .headerInner {
   width: 100%;
-  max-width: 1360px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 0 32px;
+  padding: 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -43,9 +44,9 @@
 }
 
 .logoMark {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   display: grid;
   place-items: center;
   background: linear-gradient(145deg, rgba(20, 184, 166, 0.25), rgba(56, 189, 248, 0.15));
@@ -55,8 +56,8 @@
 }
 
 .logoIcon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--teal-light);
 }
 
@@ -69,7 +70,7 @@
 
 .logoTitle {
   font-weight: 800;
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   letter-spacing: -0.03em;
   line-height: 1.2;
   background: linear-gradient(135deg, #5eead4 0%, #38bdf8 100%);
@@ -80,7 +81,7 @@
 }
 
 .logoSub {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -91,9 +92,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 5px 11px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--teal-light);
   background: rgba(20, 184, 166, 0.1);
@@ -109,14 +110,15 @@
   box-shadow: 0 0 6px var(--teal);
 }
 
-/* ── Layout grid ──────────────────────────────────────── */
+/* ── Layout: compact form | spacious preview ──────────── */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
-  gap: 28px;
-  max-width: 1360px;
+  /* Preview column gets majority of horizontal space */
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  gap: 22px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 28px 32px 0;
+  padding: 20px 28px 0;
   align-items: start;
 }
 
@@ -125,23 +127,29 @@
 .rightPanel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
   min-width: 0;
 }
 
 .rightPanel {
   position: sticky;
-  top: calc(var(--header-h) + 16px);
+  top: calc(var(--header-h) + 12px);
+  /* Fit preview + actions in viewport */
+  max-height: calc(100dvh - var(--header-h) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
 }
 
-/* ── Cards ────────────────────────────────────────────── */
+/* ── Cards — moderate density ─────────────────────────── */
 .card {
   background: var(--bg-surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  padding: 22px;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
@@ -153,12 +161,19 @@
   border-color: var(--border-strong);
 }
 
+/* Preview card is the hero — more padding room for canvas */
+.previewCard {
+  padding: 14px 16px 16px;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
 .cardHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .cardHeader .section-label,
@@ -168,33 +183,52 @@
 
 .step {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 800;
   color: var(--teal-light);
   background: rgba(20, 184, 166, 0.12);
   border: 1px solid rgba(20, 184, 166, 0.28);
 }
 
-/* ── Preview phone frame ──────────────────────────────── */
+/* ── Preview frame — grow to available space ──────────── */
 .previewFrame {
   position: relative;
-  border-radius: calc(var(--radius-xl) + 4px);
-  padding: 10px;
+  border-radius: calc(var(--radius-lg) + 2px);
+  padding: 8px;
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .previewFrameInner {
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   overflow: hidden;
   position: relative;
+  /* Cap height to keep generate button visible, but prioritize canvas */
+  max-height: min(72dvh, 820px);
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0f18;
+}
+
+/* Grow as large as column allows; height/width both capped */
+.previewFrameInner :global(.preview-canvas) {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(72dvh, 820px);
+  object-fit: contain;
 }
 
 .previewNotch {
@@ -202,50 +236,59 @@
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 72px;
-  height: 8px;
+  width: 64px;
+  height: 7px;
   border-radius: 99px;
   background: rgba(0, 0, 0, 0.45);
   z-index: 2;
   pointer-events: none;
 }
 
-/* Hide phone notch in landscape preview */
 .previewFrameLandscape .previewNotch {
   display: none;
 }
 
 .previewFrameLandscape {
-  /* landscape frame feels more like a monitor bezel */
   border-radius: var(--radius-lg);
+}
+
+.previewFrameLandscape .previewFrameInner {
+  max-height: min(52dvh, 520px);
+  min-height: 160px;
+}
+
+.previewFrameLandscape .previewFrameInner :global(.preview-canvas) {
+  max-height: min(52dvh, 520px);
+  width: 100%;
 }
 
 .previewMeta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 0 4px;
-  font-size: 0.72rem;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 0 2px;
+  font-size: 0.7rem;
   color: var(--text-muted);
 }
 
 .previewMetaTag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
+  gap: 4px;
+  padding: 3px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border);
 }
 
-/* ── Action stack (desktop / tablet) ──────────────────── */
+/* ── Action stack ─────────────────────────────────────── */
 .actionStack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 /* ── Mobile dock (hidden on larger screens) ───────────── */
@@ -258,22 +301,36 @@
    ═══════════════════════════════════════════════════════ */
 @media (max-width: 1099px) {
   .headerInner {
-    padding: 0 20px;
+    padding: 0 18px;
   }
 
   .layout {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-    gap: 18px;
-    padding: 20px 20px 0;
+    /* Still favor preview */
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px 18px 0;
+  }
+
+  .leftPanel,
+  .rightPanel {
+    gap: 10px;
   }
 
   .card {
-    padding: 18px;
-    border-radius: var(--radius-lg);
+    padding: 12px 14px;
   }
 
   .rightPanel {
-    top: calc(var(--header-h) + 12px);
+    top: calc(var(--header-h) + 10px);
+    max-height: calc(100dvh - var(--header-h) - 20px);
+  }
+
+  .previewFrameInner {
+    max-height: min(68dvh, 680px);
+  }
+
+  .previewFrameInner :global(.preview-canvas) {
+    max-height: min(68dvh, 680px);
   }
 
   .logoSub {
@@ -281,106 +338,98 @@
   }
 
   .previewNotch {
-    width: 56px;
-    height: 6px;
+    width: 48px;
+    height: 5px;
   }
 }
 
-/* Compact two-column for mid tablets: image + settings share space */
+/* Mid tablet: stack form above? Keep side-by-side with equal-ish but preview bigger */
 @media (max-width: 900px) and (min-width: 700px) {
   .layout {
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    grid-template-columns: minmax(240px, 38%) minmax(0, 1fr);
+    gap: 12px;
   }
 
   .leftPanel {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    align-content: start;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  /* Script editor spans full width of left area */
   .cardWide {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .rightPanel {
-    position: static;
+    position: sticky;
+    top: calc(var(--header-h) + 10px);
   }
 }
 
 /* ═══════════════════════════════════════════════════════
-   MOBILE  < 700px
+   MOBILE  < 700px — preview first & larger
    ═══════════════════════════════════════════════════════ */
 @media (max-width: 699px) {
   .headerInner {
-    padding: 0 14px;
+    padding: 0 12px;
   }
 
   .logoMark {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
   }
 
   .logoTitle {
-    font-size: 0.95rem;
+    font-size: 0.92rem;
   }
 
   .headerBadge {
-    padding: 5px 10px;
-    font-size: 0.65rem;
+    padding: 4px 9px;
+    font-size: 0.62rem;
   }
 
   .layout {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 14px 14px 0;
+    gap: 12px;
+    padding: 12px 12px 0;
   }
 
-  /* On mobile: preview comes first for immediate feedback */
+  /* Preview block first, full-width for space */
   .rightPanel {
     order: -1;
     position: static;
-    display: grid;
-    grid-template-columns: minmax(0, 160px) 1fr;
-    gap: 12px;
-    align-items: stretch;
+    max-height: none;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  /* Landscape: full-width preview (too wide for side-by-side) */
   .rightPanelLandscape {
-    grid-template-columns: 1fr;
+    /* same flow */
   }
 
   .previewCard {
-    grid-column: 1;
-  }
-
-  .actionStack {
-    grid-column: 2;
-    justify-content: center;
-  }
-
-  .rightPanelLandscape .previewCard,
-  .rightPanelLandscape .actionStack {
-    grid-column: 1;
-  }
-
-  .leftPanel {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .card {
-    padding: 16px;
+    width: 100%;
   }
 
   .previewFrame {
     padding: 6px;
+  }
+
+  .previewFrameInner {
+    max-height: min(52dvh, 420px);
+  }
+
+  .previewFrameInner :global(.preview-canvas) {
+    max-height: min(52dvh, 420px);
+  }
+
+  .previewFrameLandscape .previewFrameInner,
+  .previewFrameLandscape .previewFrameInner :global(.preview-canvas) {
+    max-height: min(32dvh, 240px);
   }
 
   .previewNotch {
@@ -389,6 +438,24 @@
 
   .previewMeta {
     display: none;
+  }
+
+  .actionStack {
+    width: 100%;
+  }
+
+  .leftPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .cardHeader {
+    margin-bottom: 8px;
   }
 
   /* Sticky bottom dock */
@@ -401,8 +468,8 @@
     right: 0;
     bottom: 0;
     z-index: 200;
-    padding: 10px 14px calc(10px + var(--safe-bottom));
-    background: rgba(7, 11, 20, 0.88);
+    padding: 10px 12px calc(10px + var(--safe-bottom));
+    background: rgba(7, 11, 20, 0.9);
     backdrop-filter: blur(20px) saturate(1.3);
     -webkit-backdrop-filter: blur(20px) saturate(1.3);
     border-top: 1px solid var(--border);
@@ -412,7 +479,7 @@
   .mobileDockStatus {
     flex: 1;
     min-width: 0;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--text-muted);
     line-height: 1.35;
     display: -webkit-box;
@@ -425,7 +492,6 @@
     color: var(--teal-light) !important;
   }
 
-  /* hide desktop generate in action stack; dock handles CTA */
   .desktopOnly {
     display: none !important;
   }
@@ -433,28 +499,13 @@
   .mobileDockBtn {
     flex-shrink: 0;
     width: auto;
-    min-width: 132px;
-    padding: 12px 16px;
-    font-size: 0.9rem;
+    min-width: 124px;
+    padding: 11px 14px;
+    font-size: 0.88rem;
   }
 }
 
-/* Very small phones */
 @media (max-width: 380px) {
-  .rightPanel {
-    grid-template-columns: 1fr;
-  }
-
-  .previewCard {
-    max-width: 200px;
-    margin: 0 auto;
-    width: 100%;
-  }
-
-  .actionStack {
-    grid-column: 1;
-  }
-
   .headerBadge span {
     display: none;
   }

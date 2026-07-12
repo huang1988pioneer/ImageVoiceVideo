@@ -38,6 +38,7 @@ export default function Home() {
   const [resultExt, setResultExt] = useState('mp4');
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const resultUrlRef = useRef<string | null>(null);
   const imageCache = useCache();
   const { drawFrame } = useCanvasRenderer();
   const { record } = useVideoRecorder(setStatus);
@@ -124,6 +125,8 @@ export default function Home() {
   }, []);
 
   const handleGenerate = useCallback(async () => {
+    if (recording) return;
+
     const scriptLines = parseScriptLines(script);
     if (scriptLines.length === 0) {
       setStatus('請輸入語音稿');
@@ -138,9 +141,14 @@ export default function Home() {
       canvas.height = canvasSize.height;
     }
 
-    if (resultUrl) URL.revokeObjectURL(resultUrl);
+    // Drop previous result so we can generate again without refresh
+    if (resultUrlRef.current) {
+      URL.revokeObjectURL(resultUrlRef.current);
+      resultUrlRef.current = null;
+    }
     setResultUrl(null);
     setRecording(true);
+    setStatus('準備生成…');
 
     try {
       const result = await record({
@@ -154,10 +162,11 @@ export default function Home() {
         scriptLanguage: scriptLang,
       });
       const url = URL.createObjectURL(result.blob);
+      resultUrlRef.current = url;
       setResultUrl(url);
       setResultExt(result.ext);
       setStatus(
-        `完成！${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒`,
+        `完成！${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒 — 可繼續生成`,
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -167,6 +176,7 @@ export default function Home() {
       setRecording(false);
     }
   }, [
+    recording,
     script,
     tracks,
     imageEl,
@@ -175,7 +185,6 @@ export default function Home() {
     volume,
     scriptLang,
     record,
-    resultUrl,
     canvasSize,
   ]);
 
@@ -332,8 +341,12 @@ export default function Home() {
                 customFilename={filename}
                 orientation={canvasSize.orientation}
                 onClear={() => {
-                  if (resultUrl) URL.revokeObjectURL(resultUrl);
+                  if (resultUrlRef.current) {
+                    URL.revokeObjectURL(resultUrlRef.current);
+                    resultUrlRef.current = null;
+                  }
                   setResultUrl(null);
+                  setStatus('就緒 — 可繼續生成');
                 }}
               />
             )}

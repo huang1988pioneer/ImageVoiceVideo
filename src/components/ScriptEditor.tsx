@@ -46,7 +46,7 @@ export default function ScriptEditor({
         placeholder={
           '每行為一個字幕段落\n\n男：男生台詞\n女：女生台詞\n旁白文字'
         }
-        rows={12}
+        rows={6}
         spellCheck={false}
       />
       <p className={styles.hint}>

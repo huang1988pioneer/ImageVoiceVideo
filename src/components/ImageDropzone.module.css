@@ -1,7 +1,11 @@
+/* Compact upload zone — keep small so preview gets the real estate */
+
 .zone {
   position: relative;
   width: 100%;
-  border-radius: var(--radius-lg, 16px);
+  max-width: 100%;
+  height: 120px;
+  border-radius: 12px;
   border: 2px dashed rgba(20, 184, 166, 0.35);
   background:
     linear-gradient(160deg, rgba(20, 184, 166, 0.04), rgba(56, 189, 248, 0.02));
@@ -9,44 +13,45 @@
   transition:
     border-color 0.2s,
     background 0.2s,
-    transform 0.15s,
     box-shadow 0.2s,
-    aspect-ratio 0.25s,
-    max-height 0.25s;
+    height 0.2s;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.portrait {
-  aspect-ratio: 9 / 16;
-  max-height: min(52vh, 480px);
+/* Slightly taller when image present — room to show full thumbnail */
+.hasImage {
+  height: 160px;
+  border-style: solid;
+  border-color: rgba(20, 184, 166, 0.28);
+  background: rgba(0, 0, 0, 0.25);
 }
 
-.landscape {
-  aspect-ratio: 16 / 9;
-  max-height: min(36vh, 320px);
+/* Portrait thumb: a bit taller so 9:16 fits without looking tiny */
+.portrait.hasImage {
+  height: 176px;
+  max-width: 100%;
+}
+
+/* Landscape thumb: wider feel, full 16:9 visible */
+.landscape.hasImage {
+  height: 128px;
 }
 
 .zone:hover,
 .zone:focus-visible {
   border-color: rgba(20, 184, 166, 0.75);
   background: rgba(20, 184, 166, 0.07);
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.08);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.08);
   outline: none;
 }
 
 .dragging {
   border-color: #14b8a6;
   background: rgba(20, 184, 166, 0.12);
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
-  transform: scale(1.01);
-}
-
-.hasImage {
-  border-style: solid;
-  border-color: rgba(20, 184, 166, 0.28);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
 }
 
 .hidden {
@@ -56,37 +61,40 @@
 .preview {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain; /* 小圖完整顯示，不裁切 */
+  object-position: center;
   display: block;
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .placeholder {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   color: rgba(255, 255, 255, 0.35);
-  padding: 20px;
-  text-align: center;
+  padding: 12px 16px;
+  text-align: left;
+  width: 100%;
 }
 
 .icon {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   color: rgba(20, 184, 166, 0.55);
-  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .hint {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(255, 255, 255, 0.68);
   margin: 0;
 }
 
 .sub {
-  font-size: 0.78rem;
-  margin: 0;
+  font-size: 0.72rem;
+  margin: 2px 0 0;
   color: rgba(255, 255, 255, 0.35);
 }
 
@@ -100,7 +108,7 @@
   opacity: 0;
   transition: opacity 0.2s, background 0.2s;
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   color: #fff;
   letter-spacing: 0.02em;
 }
@@ -112,63 +120,66 @@
 
 /* Tablet */
 @media (max-width: 1099px) {
-  .portrait {
-    max-height: min(42vh, 380px);
+  .zone {
+    height: 108px;
   }
 
-  .landscape {
-    max-height: min(30vh, 260px);
+  .hasImage {
+    height: 144px;
+  }
+
+  .portrait.hasImage {
+    height: 160px;
+  }
+
+  .landscape.hasImage {
+    height: 112px;
   }
 
   .icon {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
   }
 
   .hint {
-    font-size: 0.88rem;
-  }
-}
-
-@media (max-width: 900px) and (min-width: 700px) {
-  .portrait {
-    max-height: 280px;
-  }
-
-  .landscape {
-    max-height: 180px;
+    font-size: 0.84rem;
   }
 }
 
 /* Mobile */
 @media (max-width: 699px) {
-  .portrait {
-    max-height: 220px;
-  }
-
-  .landscape {
-    max-height: 160px;
-  }
-
   .zone {
-    border-radius: 12px;
+    height: 96px;
+    border-radius: 10px;
+  }
+
+  .hasImage {
+    height: 128px;
+  }
+
+  .portrait.hasImage {
+    height: 148px;
+  }
+
+  .landscape.hasImage {
+    height: 104px;
   }
 
   .placeholder {
-    padding: 14px;
-    gap: 6px;
+    padding: 10px 12px;
+    gap: 10px;
   }
 
   .icon {
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
   }
 
   .hint {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
 
   .sub {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
   }
 }
