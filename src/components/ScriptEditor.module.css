@@ -1,7 +1,7 @@
 .wrapper {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .header {
@@ -9,61 +9,113 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .label {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: rgba(255,255,255,0.6);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
 }
 
 .select {
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 8px;
+  appearance: none;
+  background:
+    rgba(255, 255, 255, 0.06)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235eead4' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
   color: #fff;
-  padding: 6px 10px;
+  padding: 8px 32px 8px 12px;
   font-size: 0.85rem;
+  font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.select:hover {
+  border-color: rgba(20, 184, 166, 0.4);
 }
 
 .select:focus {
   outline: none;
   border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+}
+
+.select option {
+  background: #0f172a;
+  color: #fff;
 }
 
 .textarea {
   width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
-  color: rgba(255,255,255,0.9);
+  min-height: 220px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.92);
   font-family: inherit;
   font-size: 0.95rem;
-  line-height: 1.7;
+  line-height: 1.75;
   padding: 14px 16px;
   resize: vertical;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
   box-sizing: border-box;
+}
+
+.textarea:hover {
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .textarea:focus {
   outline: none;
-  border-color: rgba(20,184,166,0.5);
-  background: rgba(255,255,255,0.06);
+  border-color: rgba(20, 184, 166, 0.55);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
 }
 
 .textarea::placeholder {
-  color: rgba(255,255,255,0.2);
+  color: rgba(255, 255, 255, 0.22);
   font-style: italic;
 }
 
 .hint {
   font-size: 0.75rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.32);
   margin: 0;
-  line-height: 1.6;
+  line-height: 1.55;
+}
+
+/* Tablet */
+@media (max-width: 1099px) {
+  .textarea {
+    min-height: 180px;
+    font-size: 0.92rem;
+  }
+}
+
+/* Mobile */
+@media (max-width: 699px) {
+  .wrapper {
+    gap: 10px;
+  }
+
+  .textarea {
+    min-height: 160px;
+    padding: 12px 14px;
+    font-size: 0.9rem;
+    border-radius: 12px;
+  }
+
+  .select {
+    padding: 7px 28px 7px 10px;
+    font-size: 0.8rem;
+  }
+
+  .hint {
+    font-size: 0.7rem;
+  }
 }

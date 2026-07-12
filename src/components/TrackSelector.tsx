@@ -1,15 +1,7 @@
 'use client';
 import styles from './TrackSelector.module.css';
 import type { Track } from '@/lib/scriptParser';
-
-const AVAILABLE_LANGS = [
-  { value: 'zh-TW', label: '繁中', flag: '🇹🇼' },
-  { value: 'zh-CN', label: '簡中', flag: '🇨🇳' },
-  { value: 'en-US', label: 'EN',   flag: '🇺🇸' },
-  { value: 'ja-JP', label: 'JA',   flag: '🇯🇵' },
-  { value: 'ko-KR', label: 'KR',   flag: '🇰🇷' },
-  { value: 'yue-HK',label: '粵',   flag: '🇭🇰' },
-];
+import { LANG_OPTIONS } from '@/lib/languages';
 
 interface Props {
   tracks: Track[];
@@ -29,37 +21,51 @@ export default function TrackSelector({ tracks, onChange }: Props) {
   };
 
   const setGender = (lang: string, gender: 'female' | 'male') => {
-    onChange(tracks.map(t => t.language === lang ? { ...t, gender } : t));
+    onChange(tracks.map(t => (t.language === lang ? { ...t, gender } : t)));
   };
 
   return (
     <div className={styles.wrapper}>
       <p className={styles.label}>語音語言</p>
       <div className={styles.grid}>
-        {AVAILABLE_LANGS.map(({ value, label, flag }) => {
+        {LANG_OPTIONS.map(({ value, short, flag }) => {
           const track = tracks.find(t => t.language === value);
-          const sel   = !!track;
+          const sel = !!track;
           return (
-            <div key={value} className={`${styles.card} ${sel ? styles.active : ''}`}>
+            <div
+              key={value}
+              className={`${styles.card} ${sel ? styles.active : ''}`}
+            >
               <button
                 id={`track-${value}`}
+                type="button"
                 className={styles.toggleBtn}
-                onClick={() => toggle(value, label)}
+                onClick={() => toggle(value, short)}
               >
                 <span className={styles.flag}>{flag}</span>
-                <span className={styles.langLabel}>{label}</span>
+                <span className={styles.langLabel}>{short}</span>
                 {sel && <span className={styles.check}>✓</span>}
               </button>
-              {sel && (
+              {sel && track && (
                 <div className={styles.genderRow}>
                   <button
-                    className={`${styles.genderBtn} ${track.gender === 'female' ? styles.genderActive : ''}`}
+                    type="button"
+                    className={`${styles.genderBtn} ${
+                      track.gender === 'female' ? styles.genderActive : ''
+                    }`}
                     onClick={() => setGender(value, 'female')}
-                  >♀</button>
+                  >
+                    ♀
+                  </button>
                   <button
-                    className={`${styles.genderBtn} ${track.gender === 'male' ? styles.genderActive : ''}`}
+                    type="button"
+                    className={`${styles.genderBtn} ${
+                      track.gender === 'male' ? styles.genderActive : ''
+                    }`}
                     onClick={() => setGender(value, 'male')}
-                  >♂</button>
+                  >
+                    ♂
+                  </button>
                 </div>
               )}
             </div>

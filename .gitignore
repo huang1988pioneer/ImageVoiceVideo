@@ -24,6 +24,11 @@
 .DS_Store
 *.pem
 
+# local runtime (Python server + auto-downloaded FFmpeg)
+.vendor/
+.runtime/
+_test_api.mjs
+
 # debug
 npm-debug.log*
 yarn-debug.log*

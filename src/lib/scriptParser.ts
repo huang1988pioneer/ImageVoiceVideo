@@ -1,22 +1,25 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type Gender = 'female' | 'male';
+
 export interface ScriptLine {
   text: string;
-  gender: 'female' | 'male';
+  /** null = no 男/女 prefix; use track gender */
+  gender: Gender | null;
 }
 
 export interface Track {
   language: string;
   label: string;
-  gender: 'female' | 'male';
+  gender: Gender;
 }
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 /**
  * Parse script text into lines.
- * Lines prefixed with "男：" → male; "女：" or default → female.
- * Blank lines are skipped.
+ * Lines prefixed with "男：" → male; "女：" → female; otherwise gender is null
+ * (caller should fall back to track gender). Blank lines are skipped.
  */
 export function parseScriptLines(raw: string): ScriptLine[] {
   return raw
@@ -24,11 +27,15 @@ export function parseScriptLines(raw: string): ScriptLine[] {
     .map(l => l.trim())
     .filter(Boolean)
     .map(l => {
-      const malePrefix  = /^(男[：:])\s*/;
+      const malePrefix = /^(男[：:])\s*/;
       const femalePrefix = /^(女[：:])\s*/;
-      if (malePrefix.test(l))   return { text: l.replace(malePrefix, ''),   gender: 'male'   as const };
-      if (femalePrefix.test(l)) return { text: l.replace(femalePrefix, ''), gender: 'female' as const };
-      return { text: l, gender: 'female' as const };
+      if (malePrefix.test(l)) {
+        return { text: l.replace(malePrefix, ''), gender: 'male' as const };
+      }
+      if (femalePrefix.test(l)) {
+        return { text: l.replace(femalePrefix, ''), gender: 'female' as const };
+      }
+      return { text: l, gender: null };
     });
 }
 

@@ -1,16 +1,59 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
+import { access } from 'fs/promises';
+import { constants } from 'fs';
+import { join } from 'path';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-/** Cross-platform `which` – returns full path or null */
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await access(p, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Cross-platform locate a command on PATH */
 export async function which(cmd: string): Promise<string | null> {
   try {
     const isWin = process.platform === 'win32';
-    const { stdout } = await execAsync(isWin ? `where ${cmd}` : `which ${cmd}`);
+    const bin = isWin ? 'where' : 'which';
+    const { stdout } = await execFileAsync(bin, [cmd]);
     const path = stdout.trim().split(/\r?\n/)[0];
     return path || null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve FFmpeg binary:
+ * 1. Project-local `.vendor/ffmpeg/` (auto-installed by server.py)
+ * 2. System PATH
+ */
+export async function resolveFfmpeg(): Promise<string | null> {
+  // Static relative path under cwd — turbopackIgnore keeps NFT from tracing the whole repo
+  const cwd = /* turbopackIgnore: true */ process.cwd();
+  const candidates =
+    process.platform === 'win32'
+      ? [join(cwd, '.vendor', 'ffmpeg', 'ffmpeg.exe')]
+      : [
+          join(cwd, '.vendor', 'ffmpeg', 'ffmpeg'),
+          join(cwd, '.vendor', 'ffmpeg', 'ffmpeg.exe'),
+        ];
+
+  for (const p of candidates) {
+    if (await fileExists(p)) {
+      console.log(`[FFmpeg] using vendor: ${p}`);
+      return p;
+    }
+  }
+
+  const fromPath = await which('ffmpeg');
+  if (fromPath) {
+    console.log(`[FFmpeg] using PATH: ${fromPath}`);
+  }
+  return fromPath;
 }

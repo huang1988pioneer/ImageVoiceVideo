@@ -1,57 +1,123 @@
+/* ═══════════════════════════════════════════════════════
+   Layout: Desktop (≥1100) → Tablet (700–1099) → Mobile (<700)
+   ═══════════════════════════════════════════════════════ */
+
 .main {
   position: relative;
   z-index: 1;
   min-height: 100vh;
-  padding: 0 0 40px;
+  min-height: 100dvh;
+  padding-bottom: calc(40px + var(--dock-h));
 }
 
 /* ── Header ───────────────────────────────────────────── */
 .header {
-  padding: 20px 32px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  background: rgba(9,14,26,0.7);
   position: sticky;
   top: 0;
   z-index: 100;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  background: var(--bg-glass);
+}
+
+.headerInner {
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 800;
-  font-size: 1.1rem;
-  letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #5eead4, #38bdf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  gap: 12px;
+  min-width: 0;
 }
 
-.logoIcon {
-  width: 28px;
-  height: 28px;
-  color: #14b8a6;
-  -webkit-text-fill-color: initial;
+.logoMark {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(20, 184, 166, 0.25), rgba(56, 189, 248, 0.15));
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  box-shadow: 0 0 20px rgba(20, 184, 166, 0.15);
   flex-shrink: 0;
 }
 
-/* ── Layout ───────────────────────────────────────────── */
-.layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 32px 32px 0;
-  align-items: start;
+.logoIcon {
+  width: 20px;
+  height: 20px;
+  color: var(--teal-light);
 }
 
-@media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; padding: 20px 16px 0; }
-  .header { padding: 16px; }
+.logoText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.logoTitle {
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  background: linear-gradient(135deg, #5eead4 0%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+}
+
+.logoSub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.headerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--teal-light);
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid rgba(20, 184, 166, 0.25);
+  white-space: nowrap;
+}
+
+.headerBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 6px var(--teal);
+}
+
+/* ── Layout grid ──────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  gap: 28px;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 28px 32px 0;
+  align-items: start;
 }
 
 /* ── Panels ───────────────────────────────────────────── */
@@ -59,24 +125,337 @@
 .rightPanel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
+  min-width: 0;
 }
 
 .rightPanel {
   position: sticky;
-  top: 90px;
+  top: calc(var(--header-h) + 16px);
 }
 
-/* ── Card ─────────────────────────────────────────────── */
+/* ── Cards ────────────────────────────────────────────── */
 .card {
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 18px;
+  background: var(--bg-surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   padding: 22px;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.35);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cardHeader .section-label,
+.cardHeader :global(.section-label) {
+  margin-bottom: 0;
+}
+
+.step {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--teal-light);
+  background: rgba(20, 184, 166, 0.12);
+  border: 1px solid rgba(20, 184, 166, 0.28);
+}
+
+/* ── Preview phone frame ──────────────────────────────── */
+.previewFrame {
+  position: relative;
+  border-radius: calc(var(--radius-xl) + 4px);
+  padding: 10px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.previewFrameInner {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+}
+
+.previewNotch {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 72px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Hide phone notch in landscape preview */
+.previewFrameLandscape .previewNotch {
+  display: none;
+}
+
+.previewFrameLandscape {
+  /* landscape frame feels more like a monitor bezel */
+  border-radius: var(--radius-lg);
+}
+
+.previewMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 0 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.previewMetaTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+
+/* ── Action stack (desktop / tablet) ──────────────────── */
+.actionStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Mobile dock (hidden on larger screens) ───────────── */
+.mobileDock {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TABLET  700px – 1099px
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 1099px) {
+  .headerInner {
+    padding: 0 20px;
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+    gap: 18px;
+    padding: 20px 20px 0;
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: var(--radius-lg);
+  }
+
+  .rightPanel {
+    top: calc(var(--header-h) + 12px);
+  }
+
+  .logoSub {
+    display: none;
+  }
+
+  .previewNotch {
+    width: 56px;
+    height: 6px;
+  }
+}
+
+/* Compact two-column for mid tablets: image + settings share space */
+@media (max-width: 900px) and (min-width: 700px) {
+  .layout {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .leftPanel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-content: start;
+  }
+
+  /* Script editor spans full width of left area */
+  .cardWide {
+    grid-column: 1 / -1;
+  }
+
+  .rightPanel {
+    position: static;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE  < 700px
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 699px) {
+  .headerInner {
+    padding: 0 14px;
+  }
+
+  .logoMark {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .logoTitle {
+    font-size: 0.95rem;
+  }
+
+  .headerBadge {
+    padding: 5px 10px;
+    font-size: 0.65rem;
+  }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px 14px 0;
+  }
+
+  /* On mobile: preview comes first for immediate feedback */
+  .rightPanel {
+    order: -1;
+    position: static;
+    display: grid;
+    grid-template-columns: minmax(0, 160px) 1fr;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  /* Landscape: full-width preview (too wide for side-by-side) */
+  .rightPanelLandscape {
+    grid-template-columns: 1fr;
+  }
+
+  .previewCard {
+    grid-column: 1;
+  }
+
+  .actionStack {
+    grid-column: 2;
+    justify-content: center;
+  }
+
+  .rightPanelLandscape .previewCard,
+  .rightPanelLandscape .actionStack {
+    grid-column: 1;
+  }
+
+  .leftPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .previewFrame {
+    padding: 6px;
+  }
+
+  .previewNotch {
+    display: none;
+  }
+
+  .previewMeta {
+    display: none;
+  }
+
+  /* Sticky bottom dock */
+  .mobileDock {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 200;
+    padding: 10px 14px calc(10px + var(--safe-bottom));
+    background: rgba(7, 11, 20, 0.88);
+    backdrop-filter: blur(20px) saturate(1.3);
+    -webkit-backdrop-filter: blur(20px) saturate(1.3);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .mobileDockStatus {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .recording {
+    color: var(--teal-light) !important;
+  }
+
+  /* hide desktop generate in action stack; dock handles CTA */
+  .desktopOnly {
+    display: none !important;
+  }
+
+  .mobileDockBtn {
+    flex-shrink: 0;
+    width: auto;
+    min-width: 132px;
+    padding: 12px 16px;
+    font-size: 0.9rem;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .rightPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .previewCard {
+    max-width: 200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .actionStack {
+    grid-column: 1;
+  }
+
+  .headerBadge span {
+    display: none;
+  }
 }

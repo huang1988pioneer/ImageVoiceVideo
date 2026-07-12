@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ImageDropzone from '@/components/ImageDropzone';
 import ScriptEditor from '@/components/ScriptEditor';
 import TrackSelector from '@/components/TrackSelector';
@@ -10,37 +10,58 @@ import { useVideoRecorder } from '@/hooks/useVideoRecorder';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { parseScriptLines } from '@/lib/scriptParser';
 import type { Track } from '@/lib/scriptParser';
+import {
+  resolveCanvasSize,
+  orientationLabel,
+  type OrientationMode,
+} from '@/lib/videoSize';
 import styles from './page.module.css';
 
-const CANVAS_W = 1080;
-const CANVAS_H = 1920;
+const ORIENT_STORAGE_KEY = 'ivv-orientation-mode';
 
 export default function Home() {
-  // ── State ────────────────────────────────────────────────
-  const [imageUrl,    setImageUrl]    = useState<string | null>(null);
-  const [imageEl,     setImageEl]     = useState<HTMLImageElement | null>(null);
-  const [script,      setScript]      = useState('');
-  const [scriptLang,  setScriptLang]  = useState('zh-TW');
-  const [tracks,      setTracks]      = useState<Track[]>([
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
+  const [script, setScript] = useState('');
+  const [scriptLang, setScriptLang] = useState('zh-TW');
+  const [tracks, setTracks] = useState<Track[]>([
     { language: 'zh-TW', label: '繁中', gender: 'female' },
   ]);
-  const [rate,        setRate]        = useState(0);
-  const [volume,      setVolume]      = useState(100);
-  const [format,      setFormat]      = useState<'mp4'|'webm'>('mp4');
-  const [filename,    setFilename]    = useState('');
-  const [status,      setStatus]      = useState('就緒');
-  const [recording,   setRecording]   = useState(false);
-  const [resultUrl,   setResultUrl]   = useState<string | null>(null);
-  const [resultExt,   setResultExt]   = useState('mp4');
+  const [rate, setRate] = useState(0);
+  const [volume, setVolume] = useState(100);
+  const [format, setFormat] = useState<'mp4' | 'webm'>('mp4');
+  const [orientationMode, setOrientationMode] = useState<OrientationMode>('auto');
+  const [filename, setFilename] = useState('');
+  const [status, setStatus] = useState('就緒 — 上傳圖片並輸入語音稿');
+  const [recording, setRecording] = useState(false);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [resultExt, setResultExt] = useState('mp4');
 
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageCache = useCache();
   const { drawFrame } = useCanvasRenderer();
-  const { record }    = useVideoRecorder(setStatus);
+  const { record } = useVideoRecorder(setStatus);
 
-  // ── Restore cache ────────────────────────────────────────
+  const canvasSize = useMemo(
+    () => resolveCanvasSize(orientationMode, imageEl),
+    [orientationMode, imageEl],
+  );
+
+  // Restore cache + orientation preference
   useEffect(() => {
-    setScript(imageCache.loadScript() || '水電大學籌備處\n正在招募優秀人才\n歡迎加入我們的團隊');
+    try {
+      const saved = localStorage.getItem(ORIENT_STORAGE_KEY) as OrientationMode | null;
+      if (saved === 'auto' || saved === 'portrait' || saved === 'landscape') {
+        setOrientationMode(saved);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    setScript(
+      imageCache.loadScript() ||
+        '水電大學籌備處\n正在招募優秀人才\n歡迎加入我們的團隊',
+    );
     imageCache.loadImage('last').then(blob => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -49,40 +70,73 @@ export default function Home() {
       img.src = url;
       img.onload = () => setImageEl(img);
     });
-  }, []); // eslint-disable-line
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Draw preview on canvas when image/script changes ─────
+  // Apply canvas resolution + redraw when size / content changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (canvas.width !== canvasSize.width || canvas.height !== canvasSize.height) {
+      canvas.width = canvasSize.width;
+      canvas.height = canvasSize.height;
+    }
+
     const lines = parseScriptLines(script);
-    const subs  = lines.map((l, i) => ({
-      text: l.text, startAt: i, endAt: i + 1, language: scriptLang,
+    const subs = lines.map((l, i) => ({
+      text: l.text,
+      startAt: i,
+      endAt: i + 1,
+      language: scriptLang,
     }));
     drawFrame(canvas, imageEl, subs, 0, true);
-  }, [imageEl, script, scriptLang, drawFrame]);
+  }, [imageEl, script, scriptLang, drawFrame, canvasSize]);
 
-  // ── Image upload ─────────────────────────────────────────
-  const handleImage = useCallback((blob: Blob, url: string) => {
-    setImageUrl(url);
-    const img = new Image();
-    img.src = url;
-    img.onload = () => setImageEl(img);
-    imageCache.saveImage('last', blob);
-  }, [imageCache]);
+  const handleImage = useCallback(
+    (blob: Blob, url: string) => {
+      setImageUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
+      });
+      const img = new Image();
+      img.src = url;
+      img.onload = () => setImageEl(img);
+      void imageCache.saveImage('last', blob);
+    },
+    [imageCache],
+  );
 
-  // ── Script change ─────────────────────────────────────────
-  const handleScript = useCallback((text: string) => {
-    setScript(text);
-    imageCache.saveScript(text);
-  }, [imageCache]);
+  const handleScript = useCallback(
+    (text: string) => {
+      setScript(text);
+      imageCache.saveScript(text);
+    },
+    [imageCache],
+  );
 
-  // ── Generate ─────────────────────────────────────────────
+  const handleOrientation = useCallback((mode: OrientationMode) => {
+    setOrientationMode(mode);
+    try {
+      localStorage.setItem(ORIENT_STORAGE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const handleGenerate = useCallback(async () => {
     const scriptLines = parseScriptLines(script);
-    if (scriptLines.length === 0) { setStatus('請輸入語音稿'); return; }
+    if (scriptLines.length === 0) {
+      setStatus('請輸入語音稿');
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Ensure canvas matches chosen orientation before capture
+    if (canvas.width !== canvasSize.width || canvas.height !== canvasSize.height) {
+      canvas.width = canvasSize.width;
+      canvas.height = canvasSize.height;
+    }
 
     if (resultUrl) URL.revokeObjectURL(resultUrl);
     setResultUrl(null);
@@ -90,13 +144,21 @@ export default function Home() {
 
     try {
       const result = await record({
-        scriptLines, tracks, image: imageEl,
-        canvas, format, rate, volume, scriptLanguage: scriptLang,
+        scriptLines,
+        tracks,
+        image: imageEl,
+        canvas,
+        format,
+        rate,
+        volume,
+        scriptLanguage: scriptLang,
       });
       const url = URL.createObjectURL(result.blob);
       setResultUrl(url);
       setResultExt(result.ext);
-      setStatus(`完成！共 ${result.duration.toFixed(1)} 秒`);
+      setStatus(
+        `完成！${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒`,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatus(`錯誤：${msg}`);
@@ -104,31 +166,71 @@ export default function Home() {
     } finally {
       setRecording(false);
     }
-  }, [script, tracks, imageEl, format, rate, volume, scriptLang, record, resultUrl]);
+  }, [
+    script,
+    tracks,
+    imageEl,
+    format,
+    rate,
+    volume,
+    scriptLang,
+    record,
+    resultUrl,
+    canvasSize,
+  ]);
 
   const firstLine = parseScriptLines(script)[0]?.text ?? '';
+  const lineCount = parseScriptLines(script).length;
+  const trackCount = tracks.length;
+  const orientText = orientationLabel(orientationMode, canvasSize.orientation);
 
   return (
     <main className={styles.main}>
-      {/* ── Header ── */}
       <header className={styles.header}>
-        <div className={styles.logo}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={styles.logoIcon}>
-            <path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
-          </svg>
-          <span>Image Voice Video</span>
+        <div className={styles.headerInner}>
+          <div className={styles.logo}>
+            <div className={styles.logoMark}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                className={styles.logoIcon}
+              >
+                <path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+              </svg>
+            </div>
+            <div className={styles.logoText}>
+              <span className={styles.logoTitle}>Image Voice Video</span>
+              <span className={styles.logoSub}>圖片 · 語音 · 多語字幕影片</span>
+            </div>
+          </div>
+          <div className={styles.headerBadge}>
+            <span className={styles.headerBadgeDot} />
+            <span>{recording ? '生成中' : '就緒'}</span>
+          </div>
         </div>
       </header>
 
       <div className={styles.layout}>
-        {/* ── Left panel ── */}
         <div className={styles.leftPanel}>
           <div className={styles.card}>
-            <p className="section-label">封面圖片</p>
-            <ImageDropzone onImage={handleImage} previewUrl={imageUrl} />
+            <div className={styles.cardHeader}>
+              <p className="section-label">封面圖片</p>
+              <span className={styles.step}>1</span>
+            </div>
+            <ImageDropzone
+              onImage={handleImage}
+              previewUrl={imageUrl}
+              orientation={canvasSize.orientation}
+            />
           </div>
 
-          <div className={styles.card}>
+          <div className={`${styles.card} ${styles.cardWide}`}>
+            <div className={styles.cardHeader}>
+              <p className="section-label">語音稿</p>
+              <span className={styles.step}>2</span>
+            </div>
             <ScriptEditor
               value={script}
               language={scriptLang}
@@ -138,59 +240,121 @@ export default function Home() {
           </div>
 
           <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <p className="section-label">語音語言</p>
+              <span className={styles.step}>3</span>
+            </div>
             <TrackSelector tracks={tracks} onChange={setTracks} />
           </div>
 
           <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <p className="section-label">音訊與輸出</p>
+              <span className={styles.step}>4</span>
+            </div>
             <AudioSettings
-              rate={rate} volume={volume} format={format} filename={filename}
-              onRate={setRate} onVolume={setVolume} onFormat={setFormat} onFilename={setFilename}
+              rate={rate}
+              volume={volume}
+              format={format}
+              orientation={orientationMode}
+              filename={filename}
+              onRate={setRate}
+              onVolume={setVolume}
+              onFormat={setFormat}
+              onOrientation={handleOrientation}
+              onFilename={setFilename}
             />
           </div>
         </div>
 
-        {/* ── Right panel ── */}
-        <div className={styles.rightPanel}>
-          {/* Canvas preview */}
-          <div className={styles.card}>
-            <p className="section-label">預覽</p>
-            <canvas
-              ref={canvasRef}
-              width={CANVAS_W}
-              height={CANVAS_H}
-              className="preview-canvas"
-            />
+        <div
+          className={`${styles.rightPanel} ${
+            canvasSize.orientation === 'landscape' ? styles.rightPanelLandscape : ''
+          }`}
+        >
+          <div className={`${styles.card} ${styles.previewCard}`}>
+            <div className={styles.cardHeader}>
+              <p className="section-label">即時預覽</p>
+              <span className={styles.step}>▶</span>
+            </div>
+            <div
+              className={`${styles.previewFrame} ${
+                canvasSize.orientation === 'landscape' ? styles.previewFrameLandscape : ''
+              }`}
+            >
+              <div className={styles.previewFrameInner}>
+                {canvasSize.orientation === 'portrait' && (
+                  <div className={styles.previewNotch} aria-hidden />
+                )}
+                <canvas
+                  ref={canvasRef}
+                  width={canvasSize.width}
+                  height={canvasSize.height}
+                  className="preview-canvas"
+                  data-orientation={canvasSize.orientation}
+                />
+              </div>
+              <div className={styles.previewMeta}>
+                <span className={styles.previewMetaTag}>
+                  {canvasSize.label} · {orientText}
+                </span>
+                <span className={styles.previewMetaTag}>
+                  {canvasSize.width}×{canvasSize.height}
+                </span>
+                <span className={styles.previewMetaTag}>
+                  {lineCount} 段 · {trackCount} 語
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* Status + button */}
-          <div className={`status-bar ${recording ? 'recording' : ''}`}>
-            {recording && <div className="status-dot" />}
-            <span>{status}</span>
+          <div className={styles.actionStack}>
+            <div className={`status-bar ${recording ? 'recording' : ''}`}>
+              {recording && <div className="status-dot" />}
+              <span>{status}</span>
+            </div>
+
+            <button
+              id="generate-btn"
+              type="button"
+              className={`generate-btn ${styles.desktopOnly}`}
+              onClick={handleGenerate}
+              disabled={recording}
+            >
+              {recording ? '生成中…' : '生成影片'}
+            </button>
+
+            {resultUrl && (
+              <VideoResult
+                blobUrl={resultUrl}
+                ext={resultExt}
+                firstLine={firstLine}
+                customFilename={filename}
+                orientation={canvasSize.orientation}
+                onClear={() => {
+                  if (resultUrl) URL.revokeObjectURL(resultUrl);
+                  setResultUrl(null);
+                }}
+              />
+            )}
           </div>
-
-          <button
-            id="generate-btn"
-            className="generate-btn"
-            onClick={handleGenerate}
-            disabled={recording}
-          >
-            {recording ? '🎬 生成中…' : '🎬 生成影片'}
-          </button>
-
-          {/* Result */}
-          {resultUrl && (
-            <VideoResult
-              blobUrl={resultUrl}
-              ext={resultExt}
-              firstLine={firstLine}
-              customFilename={filename}
-              onClear={() => {
-                if (resultUrl) URL.revokeObjectURL(resultUrl);
-                setResultUrl(null);
-              }}
-            />
-          )}
         </div>
+      </div>
+
+      <div className={styles.mobileDock}>
+        <div
+          className={`${styles.mobileDockStatus} ${recording ? styles.recording : ''}`}
+        >
+          {status}
+        </div>
+        <button
+          type="button"
+          className={`generate-btn ${styles.mobileDockBtn}`}
+          onClick={handleGenerate}
+          disabled={recording}
+        >
+          {recording ? '生成中…' : '生成影片'}
+        </button>
       </div>
     </main>
   );
