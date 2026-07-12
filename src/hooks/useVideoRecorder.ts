@@ -127,6 +127,12 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
     };
 
     try {
+      // ── 0. Unlock AudioContext immediately to preserve user gesture ──
+      audioContext = new AudioContext();
+      // On some browsers, AudioContext must be resumed immediately after user interaction
+      await audioContext.resume();
+      await audioContext.suspend();
+
       // ── 1. Build spoken text + subtitle tracks ─────────────────
       onStatus('正在翻譯字幕…');
       const spokenByTrack: string[][] = [];
@@ -156,8 +162,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       // ── 2. Build audio (TTS) ────────────────────────────────────
       onStatus('正在生成語音…');
-      audioContext = new AudioContext();
-      await audioContext.suspend();
       destination = audioContext.createMediaStreamDestination();
 
       const gainValue = Math.min(0.85, 1 / Math.sqrt(Math.max(tracks.length, 1)));
