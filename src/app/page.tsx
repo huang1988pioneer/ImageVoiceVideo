@@ -15,13 +15,6 @@ import {
   orientationLabel,
   type OrientationMode,
 } from '@/lib/videoSize';
-import {
-  DEFAULT_BGM,
-  presetForStyle,
-  type AudioStyleMode,
-  type BgmSettings,
-} from '@/lib/bgm';
-import { fetchLipsyncAvailable } from '@/lib/api';
 import styles from './page.module.css';
 
 const ORIENT_STORAGE_KEY = 'ivv-orientation-mode';
@@ -29,24 +22,18 @@ const ORIENT_STORAGE_KEY = 'ivv-orientation-mode';
 export default function Home() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
-  const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [script, setScript] = useState('');
   const [scriptLang, setScriptLang] = useState('zh-TW');
   const [tracks, setTracks] = useState<Track[]>([
     { language: 'zh-TW', label: '繁中', gender: 'female' },
   ]);
-  const [audioStyle, setAudioStyle] = useState<AudioStyleMode>('voice');
   const [rate, setRate] = useState(0);
   const [pitch, setPitch] = useState(0);
   const [volume, setVolume] = useState(100);
-  const [bgm, setBgm] = useState<BgmSettings>(DEFAULT_BGM);
   const [format, setFormat] = useState<'mp4' | 'webm'>('mp4');
   const [orientationMode, setOrientationMode] = useState<OrientationMode>('auto');
   const [filename, setFilename] = useState('');
-  const [lipSync, setLipSync] = useState(false);
-  const [lipSyncAvailable, setLipSyncAvailable] = useState(false);
-  const [lipSyncHint, setLipSyncHint] = useState<string | null>(null);
-  const [status, setStatus] = useState('就緒 — 選擇畫面模式、上傳圖片並輸入語音稿');
+  const [status, setStatus] = useState('就緒 — 上傳圖片並輸入語音稿');
   const [recording, setRecording] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultExt, setResultExt] = useState('mp4');
@@ -73,24 +60,14 @@ export default function Home() {
       /* ignore */
     }
 
-    setScript(
-      imageCache.loadScript() || ''
-    );
+    setScript(imageCache.loadScript() || '');
     imageCache.loadImage('last').then(blob => {
       if (!blob) return;
-      setImageBlob(blob);
       const url = URL.createObjectURL(blob);
       setImageUrl(url);
       const img = new Image();
       img.src = url;
       img.onload = () => setImageEl(img);
-    });
-
-    void fetchLipsyncAvailable().then(avail => {
-      setLipSyncAvailable(avail.available);
-      setLipSyncHint(avail.reason);
-      // Default remains 靜態圖片; only force-off if service missing
-      if (!avail.available) setLipSync(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,7 +93,6 @@ export default function Home() {
 
   const handleImage = useCallback(
     (blob: Blob, url: string) => {
-      setImageBlob(blob);
       setImageUrl(prev => {
         if (prev) URL.revokeObjectURL(prev);
         return url;
@@ -146,24 +122,6 @@ export default function Home() {
     }
   }, []);
 
-  const handleBgmChange = useCallback((partial: Partial<BgmSettings>) => {
-    setBgm(prev => ({ ...prev, ...partial }));
-  }, []);
-
-  const handleAudioStyle = useCallback((style: AudioStyleMode) => {
-    setAudioStyle(style);
-    const preset = presetForStyle(style);
-    setRate(preset.rate);
-    setPitch(preset.pitch);
-    setVolume(preset.volume);
-    setBgm({ ...preset.bgm });
-    setStatus(
-      style === 'hype'
-        ? '已選「語音+背景音樂」：旁白 + 依歌詞隨機生成 BGM'
-        : '已選「純語音」：正常旁白、無 BGM',
-    );
-  }, []);
-
   const handleGenerate = useCallback(async () => {
     if (recording) return;
 
@@ -190,38 +148,24 @@ export default function Home() {
     setRecording(true);
     setStatus('準備生成…');
 
-    // Enforce style BGM mode so pure voice never ships with leftover BGM
-    const effectiveBgm: BgmSettings =
-      audioStyle === 'hype'
-        ? { ...bgm, mode: 'builtin' }
-        : { ...bgm, mode: 'off' };
-    const singToBgm = audioStyle === 'hype';
-
     try {
       const result = await record({
         scriptLines,
         tracks,
         image: imageEl,
-        imageBlob,
         canvas,
         format,
         rate,
         volume,
         pitch,
         scriptLanguage: scriptLang,
-        bgm: effectiveBgm,
-        bgmArrayBuffer: null,
-        singToBgm,
-        lipSync: lipSync && lipSyncAvailable,
       });
       const url = URL.createObjectURL(result.blob);
       resultUrlRef.current = url;
       setResultUrl(url);
       setResultExt(result.ext);
-      const styleLabel = audioStyle === 'hype' ? '語音+背景音樂' : '純語音';
-      const lipLabel = lipSync && lipSyncAvailable ? ' · 對口' : '';
       setStatus(
-        `完成！${styleLabel}${lipLabel} · ${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒 — 可繼續生成`,
+        `完成！${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒 — 可繼續生成`,
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -235,16 +179,11 @@ export default function Home() {
     script,
     tracks,
     imageEl,
-    imageBlob,
     format,
     rate,
     volume,
     pitch,
-    bgm,
-    audioStyle,
     scriptLang,
-    lipSync,
-    lipSyncAvailable,
     record,
     canvasSize,
   ]);
@@ -323,33 +262,18 @@ export default function Home() {
               <span className={styles.step}>4</span>
             </div>
             <AudioSettings
-              audioStyle={audioStyle}
               rate={rate}
               pitch={pitch}
               volume={volume}
               format={format}
               orientation={orientationMode}
               filename={filename}
-              bgm={bgm}
-              lipSync={lipSync}
-              lipSyncAvailable={lipSyncAvailable}
-              lipSyncHint={lipSyncHint}
-              onAudioStyle={handleAudioStyle}
               onRate={setRate}
               onPitch={setPitch}
               onVolume={setVolume}
               onFormat={setFormat}
               onOrientation={handleOrientation}
               onFilename={setFilename}
-              onBgmChange={handleBgmChange}
-              onLipSync={enabled => {
-                setLipSync(enabled);
-                setStatus(
-                  enabled
-                    ? '已選「對口型」：嘴巴會跟主音軌同步（需正面人臉）'
-                    : '已選「靜態圖片」：畫面固定，僅語音與字幕變化',
-                );
-              }}
             />
           </div>
         </div>
@@ -404,9 +328,6 @@ export default function Home() {
                 <span className={styles.previewMetaTag}>
                   {lineCount} 段 · {trackCount} 語
                 </span>
-                <span className={styles.previewMetaTag}>
-                  {lipSync && lipSyncAvailable ? '對口型' : '靜態圖片'}
-                </span>
               </div>
             </div>
           </div>
@@ -424,11 +345,7 @@ export default function Home() {
               onClick={handleGenerate}
               disabled={recording}
             >
-              {recording
-                ? '生成中…'
-                : lipSync && lipSyncAvailable
-                  ? '生成對口影片'
-                  : '生成影片'}
+              {recording ? '生成中…' : '生成影片'}
             </button>
           </div>
 
@@ -440,7 +357,6 @@ export default function Home() {
                 firstLine={firstLine}
                 customFilename={filename}
                 orientation={canvasSize.orientation}
-                audioStyle={audioStyle}
                 onClear={() => {
                   if (resultUrlRef.current) {
                     URL.revokeObjectURL(resultUrlRef.current);
@@ -467,11 +383,7 @@ export default function Home() {
           onClick={handleGenerate}
           disabled={recording}
         >
-          {recording
-            ? '生成中…'
-            : lipSync && lipSyncAvailable
-              ? '生成對口影片'
-              : '生成影片'}
+          {recording ? '生成中…' : '生成影片'}
         </button>
       </div>
     </main>

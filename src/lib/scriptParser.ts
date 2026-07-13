@@ -46,13 +46,3 @@ export function parseScriptLines(raw: string): ScriptLine[] {
 export function safeFilename(raw: string, fallback = '影片'): string {
   return raw.replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 60) || fallback;
 }
-
-/** Append 語音BGM tag for voice+BGM style exports (idempotent). */
-export function withHypeFilenameTag(raw: string, fallback = '影片'): string {
-  const tag = '_語音BGM';
-  const base = raw.trim() || fallback;
-  if (base.includes('語音BGM') || base.includes('嗨歌')) return base;
-  // Keep total under safeFilename's 60-char cap so the tag is not truncated
-  const maxBase = Math.max(1, 60 - tag.length);
-  return `${base.slice(0, maxBase)}${tag}`;
-}

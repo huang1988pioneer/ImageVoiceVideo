@@ -12,18 +12,6 @@
     },
     "src/app/api/translate/route.ts": {
       "maxDuration": 30
-    },
-    "src/app/api/lipsync/route.ts": {
-      "maxDuration": 30
-    },
-    "src/app/api/lipsync/start/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/lipsync/status/route.ts": {
-      "maxDuration": 30
-    },
-    "src/app/api/lipsync/result/route.ts": {
-      "maxDuration": 60
     }
   }
 }

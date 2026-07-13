@@ -1,8 +1,7 @@
 'use client';
 import styles from './VideoResult.module.css';
-import { safeFilename, withHypeFilenameTag } from '@/lib/scriptParser';
+import { safeFilename } from '@/lib/scriptParser';
 import type { Orientation } from '@/lib/videoSize';
-import type { AudioStyleMode } from '@/lib/bgm';
 
 interface Props {
   blobUrl: string | null;
@@ -10,8 +9,6 @@ interface Props {
   firstLine: string;
   customFilename: string;
   orientation?: Orientation;
-  /** When hype (voice+BGM), download name is tagged with 語音BGM */
-  audioStyle?: AudioStyleMode;
   onClear: () => void;
 }
 
@@ -21,15 +18,11 @@ export default function VideoResult({
   firstLine,
   customFilename,
   orientation = 'portrait',
-  audioStyle = 'voice',
   onClear,
 }: Props) {
   if (!blobUrl) return null;
 
-  let rawName = customFilename.trim() || firstLine || '影片';
-  if (audioStyle === 'hype') {
-    rawName = withHypeFilenameTag(rawName);
-  }
+  const rawName = customFilename.trim() || firstLine || '影片';
   const filename = `${safeFilename(rawName)}.${ext}`;
   const orientClass =
     orientation === 'landscape' ? styles.landscape : styles.portrait;

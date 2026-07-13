@@ -4,37 +4,20 @@ import {
   fetchTTSBatch,
   fetchTranslate,
   fetchConvert,
-  startLipsyncJob,
-  pollLipsyncUntilDone,
 } from '@/lib/api';
-import { exportSpeechToWav } from '@/lib/exportSpeechAudio';
 import {
   FRAME_INTERVAL_MS,
   VIDEO_FPS,
   mediaRecorderBitrateOptions,
 } from '@/lib/videoQuality';
 import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
-import type { SubtitleLine, VisualSource } from './useCanvasRenderer';
+import type { SubtitleLine } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
-import {
-  analyzeLyricsForMusic,
-  applyBgmDuckAutomation,
-  bgmGainFromUi,
-  buildBeatSyncedTimeline,
-  createLyricSeededBgm,
-  lineMelodyDetuneCents,
-  scheduleLoopingBgm,
-  type BgmSettings,
-  type DuckSegment,
-  type LyricMusicProfile,
-} from '@/lib/bgm';
 
 export interface RecordingOptions {
   scriptLines: ScriptLine[];
   tracks: Track[];
   image: HTMLImageElement | null;
-  /** Original image file for lipsync upload (required when lipSync) */
-  imageBlob?: Blob | null;
   canvas: HTMLCanvasElement;
   format: 'mp4' | 'webm';
   rate: number;
@@ -42,17 +25,6 @@ export interface RecordingOptions {
   /** Edge TTS pitch UI scale -5…+5 (default 0) */
   pitch?: number;
   scriptLanguage: string;
-  /** BGM mode / volume / duck */
-  bgm?: BgmSettings;
-  /** Raw audio for mode=upload (mp3/wav/ogg…) */
-  bgmArrayBuffer?: ArrayBuffer | null;
-  /**
-   * Align vocals to beat grid + apply melodic detune (hype “singing”).
-   * Requires builtin lyric-seeded BGM for best effect.
-   */
-  singToBgm?: boolean;
-  /** True talking-head lip-sync via external provider */
-  lipSync?: boolean;
 }
 
 export interface RecordingResult {
@@ -132,13 +104,8 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
     const {
       scriptLines, tracks, image, canvas,
-      imageBlob = null,
       format, rate, volume, scriptLanguage,
       pitch = 0,
-      bgm,
-      bgmArrayBuffer = null,
-      singToBgm = false,
-      lipSync = false,
     } = opts;
 
     const { mimeType, ext } = chooseMime(format);
@@ -149,8 +116,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
     let canvasStream: MediaStream | null = null;
     let mixedStream: MediaStream | null = null;
     let recorder: MediaRecorder | null = null;
-    let lipsyncVideoEl: HTMLVideoElement | null = null;
-    let lipsyncObjectUrl: string | null = null;
     const resources: {
       worker: Worker | null;
       workerUrl: string | null;
@@ -204,7 +169,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       const gainValue = Math.min(0.85, 1 / Math.sqrt(Math.max(tracks.length, 1)));
       const segmentDurations: number[] = new Array(scriptLines.length).fill(0);
-      const speechDurations: number[] = new Array(scriptLines.length).fill(0);
       const allSources: { source: AudioBufferSourceNode; startAt: number }[] = [];
       const trackBuffers: AudioBuffer[][] = [];
 
@@ -241,68 +205,22 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       for (let i = 0; i < scriptLines.length; i++) {
         const maxDur = Math.max(...trackBuffers.map(bufs => bufs[i].duration), 0.4);
-        speechDurations[i] = maxDur;
         segmentDurations[i] = maxDur + 0.2;
       }
 
-      // ── 2b. Lyric-seeded BGM + optional beat-sync “singing” ─────
-      type BgmPlan = {
-        buffer: AudioBuffer;
-        gain: GainNode;
-        baseGain: number;
-        duck: boolean;
-        duckSegments: DuckSegment[];
-        profile: LyricMusicProfile | null;
-      };
-      let bgmPlan: BgmPlan | null = null;
-      let musicProfile: LyricMusicProfile | null = null;
-
-      const bgmMode = bgm?.mode ?? 'off';
-      const lyricTexts = scriptLines.map(l => l.text);
-
-      if (bgmMode === 'builtin' || singToBgm) {
-        musicProfile = analyzeLyricsForMusic(lyricTexts);
-      }
-
-      // Beat-align vocals when singing to BGM
-      let segmentStarts: number[];
-      let totalDuration: number;
-
-      if (singToBgm && musicProfile) {
-        const timeline = buildBeatSyncedTimeline(speechDurations, musicProfile.bpm);
-        for (let i = 0; i < scriptLines.length; i++) {
-          segmentDurations[i] = timeline.segmentDurations[i];
-          speechDurations[i] = timeline.speechDurations[i];
-        }
-        segmentStarts = timeline.segmentStarts;
-        totalDuration = timeline.totalDuration;
-        onStatus(
-          `語音+背景音樂：${musicProfile.styleName} · ${musicProfile.bpm} BPM · 共 ${scriptLines.length} 句`,
-        );
-      } else {
-        segmentStarts = segmentDurations.reduce<number[]>((starts, _dur, idx) => {
-          starts.push(idx === 0 ? 0 : starts[idx - 1] + segmentDurations[idx - 1]);
-          return starts;
-        }, []);
-        totalDuration = Math.max(
-          1,
-          segmentDurations.reduce((a, b) => a + b, 0),
-        );
-      }
+      const segmentStarts = segmentDurations.reduce<number[]>((starts, _dur, idx) => {
+        starts.push(idx === 0 ? 0 : starts[idx - 1] + segmentDurations[idx - 1]);
+        return starts;
+      }, []);
+      const totalDuration = Math.max(
+        1,
+        segmentDurations.reduce((a, b) => a + b, 0),
+      );
 
       trackBuffers.forEach((buffers, trackIndex) => {
         buffers.forEach((buffer, lineIndex) => {
           const source = audioContext!.createBufferSource();
           source.buffer = buffer;
-
-          // Melodic contour for hype “singing” (Web Audio detune in cents)
-          if (singToBgm && musicProfile && typeof source.detune?.setValueAtTime === 'function') {
-            try {
-              source.detune.value = lineMelodyDetuneCents(lineIndex, musicProfile);
-            } catch {
-              /* ignore unsupported detune */
-            }
-          }
 
           const gain = audioContext!.createGain();
           gain.gain.value = gainValue;
@@ -320,52 +238,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         });
       });
 
-      if (bgmMode !== 'off') {
-        onStatus(
-          musicProfile
-            ? `正在依歌詞生成 BGM（${musicProfile.styleName} · ${musicProfile.bpm} BPM）…`
-            : '正在準備 BGM…',
-        );
-        try {
-          let bgmBuffer: AudioBuffer;
-          if (bgmMode === 'builtin') {
-            if (!musicProfile) {
-              musicProfile = analyzeLyricsForMusic(lyricTexts);
-            }
-            // Loop length: 8 beats ≈ 2 bars, scales with BPM
-            const loopSec = Math.max(4, (60 / musicProfile.bpm) * 8);
-            bgmBuffer = createLyricSeededBgm(audioContext, musicProfile, loopSec);
-          } else {
-            if (!bgmArrayBuffer || bgmArrayBuffer.byteLength < 64) {
-              throw new Error('請先上傳 BGM 音訊檔');
-            }
-            bgmBuffer = await audioContext.decodeAudioData(bgmArrayBuffer.slice(0));
-          }
-
-          const baseGain = bgmGainFromUi(bgm?.volume ?? 35);
-          const bgmGain = audioContext.createGain();
-          bgmGain.gain.value = baseGain;
-          bgmGain.connect(destination);
-
-          const duckSegments: DuckSegment[] = segmentStarts.map((start, i) => ({
-            start,
-            end: start + speechDurations[i],
-          }));
-
-          bgmPlan = {
-            buffer: bgmBuffer,
-            gain: bgmGain,
-            baseGain,
-            duck: bgm?.duck !== false,
-            duckSegments,
-            profile: musicProfile,
-          };
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          throw new Error(`BGM 無法載入：${msg}`);
-        }
-      }
-
       for (let i = 0; i < scriptLines.length; i++) {
         for (const trackSubs of allSubtitleTracks) {
           trackSubs[i].startAt = segmentStarts[i];
@@ -373,74 +245,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         }
       }
       const flatSubtitles = allSubtitleTracks.flat();
-
-      // ── 2c. Optional true lip-sync (talking head) ────────────────
-      // Drive mouth with primary speech track only (no BGM).
-      let visual: VisualSource | null = image;
-
-      if (lipSync) {
-        if (!imageBlob || imageBlob.size < 32) {
-          throw new Error('對口型需要原始圖片檔，請重新上傳圖片後再試');
-        }
-        if (abortRef.current) throw new Error('已取消');
-
-        // Primary track: script language match, else first track
-        let primaryIdx = tracks.findIndex(t => t.language === scriptLanguage);
-        if (primaryIdx < 0) primaryIdx = 0;
-        const primaryBuffers = trackBuffers[primaryIdx];
-        if (!primaryBuffers?.length) {
-          throw new Error('對口型找不到主音軌語音');
-        }
-
-        onStatus('正在匯出語音軌以生成對口…');
-        const speechBlob = await exportSpeechToWav(
-          primaryBuffers.map((buffer, i) => ({
-            buffer,
-            startAt: segmentStarts[i],
-          })),
-          totalDuration,
-        );
-
-        if (abortRef.current) throw new Error('已取消');
-        onStatus('正在上傳對口素材…');
-        const { jobId } = await startLipsyncJob(imageBlob, speechBlob);
-        if (abortRef.current) throw new Error('已取消');
-
-        const { objectUrl } = await pollLipsyncUntilDone(jobId, onStatus);
-        lipsyncObjectUrl = objectUrl;
-
-        onStatus('正在載入對口影片…');
-        lipsyncVideoEl = document.createElement('video');
-        lipsyncVideoEl.muted = true;
-        lipsyncVideoEl.playsInline = true;
-        lipsyncVideoEl.preload = 'auto';
-        lipsyncVideoEl.src = objectUrl;
-
-        await new Promise<void>((resolve, reject) => {
-          const v = lipsyncVideoEl!;
-          let settled = false;
-          const finish = (err?: Error) => {
-            if (settled) return;
-            settled = true;
-            v.removeEventListener('loadeddata', onReady);
-            v.removeEventListener('error', onErr);
-            if (err) reject(err);
-            else resolve();
-          };
-          const onReady = () => finish();
-          const onErr = () => finish(new Error('對口影片無法播放'));
-          v.addEventListener('loadeddata', onReady);
-          v.addEventListener('error', onErr);
-          v.load();
-          setTimeout(() => {
-            if (v.readyState >= 2) finish();
-            else finish(new Error('對口影片載入逾時'));
-          }, 20_000);
-        });
-
-        visual = lipsyncVideoEl;
-        onStatus('對口動畫就緒，開始錄製…');
-      }
+      const visual = image;
 
       // ── 3. Canvas stream + MediaRecorder ────────────────────────
       // Ensure context is running before we attach streams / start encoder
@@ -540,45 +345,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               }
             }
 
-            // Sync talking-head video to recorder start (audio graph owns sound)
-            if (lipsyncVideoEl) {
-              try {
-                lipsyncVideoEl.pause();
-                lipsyncVideoEl.currentTime = 0;
-                const playPromise = lipsyncVideoEl.play();
-                if (playPromise && typeof playPromise.catch === 'function') {
-                  playPromise.catch(err => console.warn('lipsync video.play failed', err));
-                }
-              } catch (e) {
-                console.warn('lipsync video start failed', e);
-              }
-            }
-
-            // Loop BGM under TTS for the full video length
-            if (bgmPlan) {
-              try {
-                if (bgmPlan.duck) {
-                  applyBgmDuckAutomation(
-                    bgmPlan.gain,
-                    audioStartTime,
-                    bgmPlan.baseGain,
-                    bgmPlan.duckSegments,
-                  );
-                } else {
-                  bgmPlan.gain.gain.setValueAtTime(bgmPlan.baseGain, audioStartTime);
-                }
-                scheduleLoopingBgm(
-                  ctx,
-                  bgmPlan.buffer,
-                  bgmPlan.gain,
-                  audioStartTime,
-                  totalDuration,
-                );
-              } catch (e) {
-                console.warn('BGM schedule failed', e);
-              }
-            }
-
             // Wall-clock worker keeps painting even when the tab is backgrounded.
             // Interval must match VIDEO_FPS (≥24); 66ms was ~15fps and caused choppy MP4.
             const frameMs = FRAME_INTERVAL_MS;
@@ -609,21 +375,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               );
               const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
               onStatus(`正在錄製影片 ${pct}% (請勿切換分頁或關閉螢幕，否則會中斷)…`);
-
-              // Soft-correct lipsync video drift vs wall/audio clock
-              if (lipsyncVideoEl && lipsyncVideoEl.readyState >= 2) {
-                const drift = Math.abs(lipsyncVideoEl.currentTime - elapsed);
-                if (drift > 0.08) {
-                  try {
-                    lipsyncVideoEl.currentTime = Math.min(
-                      elapsed,
-                      Math.max(0, lipsyncVideoEl.duration || elapsed),
-                    );
-                  } catch {
-                    /* ignore seek errors mid-play */
-                  }
-                }
-              }
 
               drawFrame(canvas, activeVisual, flatSubtitles, elapsed);
               requestCanvasFrame(streamForFrames);
@@ -737,25 +488,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       if (canvasStream) {
         stopTracks(canvasStream);
-      }
-
-      if (lipsyncVideoEl) {
-        try {
-          lipsyncVideoEl.pause();
-          lipsyncVideoEl.removeAttribute('src');
-          lipsyncVideoEl.load();
-        } catch {
-          /* ignore */
-        }
-        lipsyncVideoEl = null;
-      }
-      if (lipsyncObjectUrl) {
-        try {
-          URL.revokeObjectURL(lipsyncObjectUrl);
-        } catch {
-          /* ignore */
-        }
-        lipsyncObjectUrl = null;
       }
 
       if (audioContext) {

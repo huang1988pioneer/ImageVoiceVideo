@@ -23,33 +23,22 @@ test.describe('Image Voice Video — home', () => {
     await expect(page.getByText(/語音|語言|繁中|繁體/i).first()).toBeVisible();
   });
 
-  test('can switch pure voice and default hype styles', async ({ page }) => {
+  test('shows audio controls without BGM or lip-sync options', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.locator('#audio-style-voice')).toBeVisible();
-    await expect(page.locator('#audio-style-hype')).toBeVisible();
-    await expect(page.locator('#audio-style-voice')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('#rate-slider')).toBeVisible();
     await expect(page.locator('#pitch-slider')).toBeVisible();
-    // Pure voice: no BGM volume control
+    await expect(page.locator('#volume-slider')).toBeVisible();
+    await expect(page.locator('#filename-input')).toBeVisible();
+
+    // Removed features must not appear
+    await expect(page.locator('#audio-style-voice')).toHaveCount(0);
+    await expect(page.locator('#audio-style-hype')).toHaveCount(0);
     await expect(page.locator('#bgm-volume-slider')).toHaveCount(0);
-
-    await page.locator('#audio-style-hype').click();
-    await expect(page.locator('#audio-style-hype')).toHaveAttribute('aria-checked', 'true');
-    await expect(page.locator('#bgm-volume-slider')).toBeVisible();
-    await expect(page.locator('#bgm-duck')).toBeChecked();
-    await expect(page.locator('.status-bar')).toContainText(/語音\+背景音樂|BGM/);
-
-    await page.locator('#audio-style-voice').click();
-    await expect(page.locator('#audio-style-voice')).toHaveAttribute('aria-checked', 'true');
-    await expect(page.locator('#bgm-volume-slider')).toHaveCount(0);
-    await expect(page.locator('.status-bar')).toContainText(/純語音/);
-
-    // Voice+BGM style tags download filename
-    await page.locator('#audio-style-hype').click();
-    await expect(page.locator('#filename-input')).toHaveAttribute(
-      'placeholder',
-      /語音BGM/,
-    );
+    await expect(page.locator('#bgm-duck')).toHaveCount(0);
+    await expect(page.locator('#visual-mode-lipsync')).toHaveCount(0);
+    await expect(page.getByText('對口型')).toHaveCount(0);
+    await expect(page.getByText('語音+背景音樂')).toHaveCount(0);
   });
 
   test('uploads cover image into dropzone', async ({ page }) => {
