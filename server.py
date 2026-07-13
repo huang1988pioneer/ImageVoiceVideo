@@ -187,13 +187,24 @@ class Handler(SimpleHTTPRequestHandler):
             in_path.write_bytes(webm_data)
             print(f"[Convert] WebM {len(webm_data):,} bytes → MP4", flush=True)
 
+            # Quality floor: ≥1024 Kbps (1 Mbps) video, ≥24 fps
             subprocess.run(
                 [
                     FFMPEG_PATH, "-y",
+                    "-fflags", "+genpts",
                     "-i", str(in_path),
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-                    "-c:a", "aac", "-b:a", "160k",
-                    "-movflags", "+faststart",   # 索引移至開頭，播放器快速開播
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-b:v", "2500k",
+                    "-maxrate", "2500k",
+                    "-bufsize", "5000k",
+                    "-r", "30",
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "aac",
+                    "-b:a", "128k",
+                    "-ar", "44100",
+                    "-movflags", "+faststart",  # 索引移至開頭，播放器快速開播
+                    "-avoid_negative_ts", "make_zero",
                     str(out_path),
                 ],
                 check=True,

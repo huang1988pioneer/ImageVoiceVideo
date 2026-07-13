@@ -1,7 +1,11 @@
 'use client';
 import { useCallback, useRef } from 'react';
 import { fetchTTSBatch, fetchTranslate, fetchConvert } from '@/lib/api';
-import { fixWebmDuration } from '@/lib/webmDuration';
+import {
+  FRAME_INTERVAL_MS,
+  VIDEO_FPS,
+  mediaRecorderBitrateOptions,
+} from '@/lib/videoQuality';
 import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
 import type { SubtitleLine } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
@@ -76,8 +80,8 @@ function requestCanvasFrame(stream: MediaStream) {
  * Reusing a previous track often yields 0-duration / empty WebM in Chrome.
  */
 function createCanvasStream(canvas: HTMLCanvasElement): MediaStream {
-  // Set framerate to 30fps as requested (above 24fps)
-  return canvas.captureStream(30);
+  // VIDEO_FPS ≥ 24; captureStream drives encoder cadence
+  return canvas.captureStream(VIDEO_FPS);
 }
 
 export function useVideoRecorder(onStatus: (msg: string) => void) {
@@ -264,10 +268,8 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       try {
         recorder = new MediaRecorder(mixedStream, {
           mimeType,
-          // Bitrate set to 2.5 Mbps (2,500,000 bps) as requested (above 1Mbps)
-          // while keeping file size under 4MB Vercel limit for typical short videos.
-          videoBitsPerSecond: 2_500_000,
-          audioBitsPerSecond: 128_000,
+          // ≥ 1 Mbps (1024 Kbps) video + 128 kbps audio — see videoQuality.ts
+          ...mediaRecorderBitrateOptions(),
         });
       } catch {
         recorder = new MediaRecorder(mixedStream);
@@ -332,11 +334,13 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               }
             }
 
-            // Wall-clock worker keeps painting even when the tab is backgrounded
+            // Wall-clock worker keeps painting even when the tab is backgrounded.
+            // Interval must match VIDEO_FPS (≥24); 66ms was ~15fps and caused choppy MP4.
+            const frameMs = FRAME_INTERVAL_MS;
             const workerCode = `
               let timer;
               self.onmessage = e => {
-                if (e.data === 'start') timer = setInterval(() => self.postMessage('tick'), 66);
+                if (e.data === 'start') timer = setInterval(() => self.postMessage('tick'), ${frameMs});
                 if (e.data === 'stop')  { clearInterval(timer); self.close(); }
               };
             `;
@@ -437,12 +441,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         throw new Error('錄製檔案過小（可能無影格），請重新整理後再試');
       }
 
-      // Note: We deliberately removed fixWebmDuration here!
-      // The fixWebmDuration script frequently corrupts single-chunk WebM files,
-      // causing them to truncate early (e.g. stopping at 6 seconds).
-      // Without it, WebM duration might show as 0, but it will play fully.
-      // Furthermore, because we lowered the bitrate, the file will be < 4MB
-      // and will successfully convert to MP4 (which has perfect duration headers).
+      // Note: We deliberately skip fixWebmDuration — it often corrupts
+      // single-chunk WebM (early truncation). WebM may show duration 0 but
+      // plays fully; MP4 conversion rewrites duration headers correctly.
 
       if (format === 'mp4' && (currentExt === 'webm' || blob.type.includes('webm'))) {
         onStatus('正在轉換為 MP4…');

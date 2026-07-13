@@ -8,6 +8,13 @@ import { mkdtemp, writeFile, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { resolveFfmpeg } from './which';
+import {
+  FFMPEG_AUDIO_BITRATE,
+  FFMPEG_FPS,
+  FFMPEG_VIDEO_BITRATE,
+  FFMPEG_VIDEO_BUFSIZE,
+  FFMPEG_VIDEO_MAXRATE,
+} from '@/lib/videoQuality';
 
 const execFileAsync = promisify(execFile);
 
@@ -40,6 +47,7 @@ export async function POST(req: NextRequest) {
     console.log(`[Convert] WebM ${buf.length.toLocaleString()} bytes → MP4 via ${ffmpegPath}`);
 
     // veryfast + genpts: fix MediaRecorder WebM with missing/zero duration timestamps
+    // Quality floor: ≥1024 Kbps video, ≥24 fps (targets from videoQuality.ts)
     await execFileAsync(
       ffmpegPath,
       [
@@ -48,12 +56,14 @@ export async function POST(req: NextRequest) {
         '-i', inPath,
         '-c:v', 'libx264',
         '-preset', 'veryfast',
-        '-b:v', '1.5M',
-        '-maxrate', '1.5M',
-        '-bufsize', '3M',
-        '-r', '30',
+        '-b:v', FFMPEG_VIDEO_BITRATE,
+        '-maxrate', FFMPEG_VIDEO_MAXRATE,
+        '-bufsize', FFMPEG_VIDEO_BUFSIZE,
+        '-r', FFMPEG_FPS,
+        '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
-        '-b:a', '128k',
+        '-b:a', FFMPEG_AUDIO_BITRATE,
+        '-ar', '44100',
         '-movflags', '+faststart',
         '-avoid_negative_ts', 'make_zero',
         outPath,
