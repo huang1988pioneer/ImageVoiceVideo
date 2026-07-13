@@ -51,13 +51,26 @@ export function useCanvasRenderer() {
     const bottomMargin = Math.round((H > W ? 60 : 48) * scale);
 
     // ── Background ───────────────────────────────────────────────
-    // Contain-fit: always show the complete image (never crop edges).
-    // Letterbox bars only appear when user forces 9:16 / 16:9 that
-    // doesn't match the photo; auto mode matches image aspect instead.
+    // 1. Draw blurred background (cover fit) to fill empty space
+    // 2. Draw complete image (contain fit) so it's fully visible
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0a0f18';
     ctx.fillRect(0, 0, W, H);
+
     if (image && image.naturalWidth > 0) {
+      // Blurred background
+      const coverScale = Math.max(W / image.naturalWidth, H / image.naturalHeight);
+      const coverW = image.naturalWidth * coverScale;
+      const coverH = image.naturalHeight * coverScale;
+      const coverX = (W - coverW) / 2;
+      const coverY = (H - coverH) / 2;
+
+      ctx.save();
+      ctx.filter = 'blur(24px) brightness(0.5)';
+      ctx.drawImage(image, coverX, coverY, coverW, coverH);
+      ctx.restore();
+
+      // Complete uncropped image
       const imgScale = Math.min(W / image.naturalWidth, H / image.naturalHeight);
       const sw = image.naturalWidth * imgScale;
       const sh = image.naturalHeight * imgScale;
