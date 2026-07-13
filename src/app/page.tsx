@@ -277,9 +277,13 @@ export default function Home() {
         </div>
 
         <div
-          className={`${styles.rightPanel} ${
-            canvasSize.orientation === 'landscape' ? styles.rightPanelLandscape : ''
-          }`}
+          className={[
+            styles.rightPanel,
+            canvasSize.orientation === 'landscape' ? styles.rightPanelLandscape : '',
+            resultUrl ? styles.rightPanelHasResult : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
         >
           <div className={`${styles.card} ${styles.previewCard}`}>
             <div className={styles.cardHeader}>
@@ -332,8 +336,10 @@ export default function Home() {
             >
               {recording ? '生成中…' : '生成影片'}
             </button>
+          </div>
 
-            {resultUrl && (
+          {resultUrl && (
+            <div className={styles.resultSlot}>
               <VideoResult
                 blobUrl={resultUrl}
                 ext={resultExt}
@@ -349,8 +355,8 @@ export default function Home() {
                   setStatus('就緒 — 可繼續生成');
                 }}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -47,6 +47,7 @@ export default function VideoResult({
           controls
           className={styles.video}
           playsInline
+          preload="metadata"
         />
       </div>
       <a

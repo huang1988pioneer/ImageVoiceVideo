@@ -39,11 +39,12 @@ export async function POST(req: NextRequest) {
     await writeFile(inPath, buf);
     console.log(`[Convert] WebM ${buf.length.toLocaleString()} bytes → MP4 via ${ffmpegPath}`);
 
-    // veryfast: better for serverless / remote where wall-clock is limited
+    // veryfast + genpts: fix MediaRecorder WebM with missing/zero duration timestamps
     await execFileAsync(
       ffmpegPath,
       [
         '-y',
+        '-fflags', '+genpts',
         '-i', inPath,
         '-c:v', 'libx264',
         '-preset', 'veryfast',
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
         '-c:a', 'aac',
         '-b:a', '128k',
         '-movflags', '+faststart',
+        '-avoid_negative_ts', 'make_zero',
         outPath,
       ],
       { timeout: 55_000 },

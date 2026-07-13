@@ -1,16 +1,10 @@
 'use client';
 import { useCallback, useRef } from 'react';
 import { fetchTTSBatch, fetchTranslate, fetchConvert } from '@/lib/api';
+import { fixWebmDuration } from '@/lib/webmDuration';
 import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
 import type { SubtitleLine } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
-
-// ysFixWebmDuration is loaded via <Script> in layout.tsx
-declare const ysFixWebmDuration: (
-  blob: Blob,
-  duration: number,
-  callback: (fixed: Blob) => void,
-) => void;
 
 export interface RecordingOptions {
   scriptLines: ScriptLine[];
@@ -66,23 +60,6 @@ function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Obtain a live canvas capture stream.
- * Reuses a previous stream if its video track is still live; otherwise creates a new one.
- * Stopping canvas tracks between runs can break re-capture in some browsers — we prefer reuse.
- */
-function acquireCanvasStream(
-  canvas: HTMLCanvasElement,
-  existing: MediaStream | null,
-): MediaStream {
-  if (existing) {
-    const live = existing.getVideoTracks().some(t => t.readyState === 'live');
-    if (live) return existing;
-    stopTracks(existing);
-  }
-  return canvas.captureStream(30);
-}
-
 function requestCanvasFrame(stream: MediaStream) {
   const track = stream.getVideoTracks()[0] as CanvasCaptureTrack | undefined;
   if (track?.requestFrame) {
@@ -94,11 +71,18 @@ function requestCanvasFrame(stream: MediaStream) {
   }
 }
 
+/**
+ * Always create a fresh capture stream for each recording.
+ * Reusing a previous track often yields 0-duration / empty WebM in Chrome.
+ */
+function createCanvasStream(canvas: HTMLCanvasElement): MediaStream {
+  // frameRate 30 keeps the track clock advancing even if requestFrame is missing
+  return canvas.captureStream(30);
+}
+
 export function useVideoRecorder(onStatus: (msg: string) => void) {
   const abortRef = useRef(false);
   const busyRef = useRef(false);
-  /** Persist canvas capture stream across runs so we can generate repeatedly without refresh */
-  const canvasStreamRef = useRef<MediaStream | null>(null);
   const { drawFrame } = useCanvasRenderer();
 
   const record = useCallback(async (opts: RecordingOptions): Promise<RecordingResult> => {
@@ -118,9 +102,14 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
     let audioContext: AudioContext | null = null;
     let destination: MediaStreamAudioDestinationNode | null = null;
+    let canvasStream: MediaStream | null = null;
     let mixedStream: MediaStream | null = null;
     let recorder: MediaRecorder | null = null;
-    const resources: { worker: Worker | null; workerUrl: string | null; timer: ReturnType<typeof setTimeout> | null } = {
+    const resources: {
+      worker: Worker | null;
+      workerUrl: string | null;
+      timer: ReturnType<typeof setTimeout> | null;
+    } = {
       worker: null,
       workerUrl: null,
       timer: null,
@@ -129,9 +118,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
     try {
       // ── 0. Unlock AudioContext immediately to preserve user gesture ──
       audioContext = new AudioContext();
-      // On some browsers, AudioContext must be resumed immediately after user interaction
       await audioContext.resume();
-      await audioContext.suspend();
+      // Keep context running (do NOT suspend). A suspended context during
+      // MediaRecorder setup can produce silent / 0-length audio tracks.
 
       // ── 1. Build spoken text + subtitle tracks ─────────────────
       onStatus('正在翻譯字幕…');
@@ -160,8 +149,11 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         );
       }
 
-      // ── 2. Build audio (TTS) — batch per track (one WS per voice on server) ──
+      // ── 2. Build audio (TTS) — batch per track ─────────────────
       onStatus('正在生成語音…');
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
       destination = audioContext.createMediaStreamDestination();
 
       const gainValue = Math.min(0.85, 1 / Math.sqrt(Math.max(tracks.length, 1)));
@@ -188,7 +180,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
         const buffers: AudioBuffer[] = [];
         for (const ab of abs) {
-          // slice so the buffer can be decoded even if the original is detached
           const audioBuf = await audioContext.decodeAudioData(ab.slice(0));
           buffers.push(audioBuf);
         }
@@ -226,7 +217,10 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         });
       });
 
-      const totalDuration = segmentDurations.reduce((a, b) => a + b, 0);
+      const totalDuration = Math.max(
+        1,
+        segmentDurations.reduce((a, b) => a + b, 0),
+      );
 
       let cumTime = 0;
       for (let i = 0; i < scriptLines.length; i++) {
@@ -239,37 +233,41 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       const flatSubtitles = allSubtitleTracks.flat();
 
       // ── 3. Canvas stream + MediaRecorder ────────────────────────
-      // Draw a fresh frame before capture so the first encoded frame is valid
-      drawFrame(canvas, image, flatSubtitles, 0);
-
-      const canvasStream = acquireCanvasStream(canvas, canvasStreamRef.current);
-      canvasStreamRef.current = canvasStream;
-      requestCanvasFrame(canvasStream);
-
-      const videoTracks = canvasStream.getVideoTracks().filter(t => t.readyState === 'live');
-      if (videoTracks.length === 0) {
-        // Last resort: force a brand-new capture stream
-        stopTracks(canvasStreamRef.current);
-        canvasStreamRef.current = canvas.captureStream(30);
-        requestCanvasFrame(canvasStreamRef.current);
+      // Ensure context is running before we attach streams / start encoder
+      if (audioContext.state !== 'running') {
+        await audioContext.resume();
       }
 
-      const liveCanvas = canvasStreamRef.current!;
-      const liveVideo = liveCanvas.getVideoTracks().filter(t => t.readyState === 'live');
+      drawFrame(canvas, image, flatSubtitles, 0);
+
+      canvasStream = createCanvasStream(canvas);
+      // Paint + push a few frames so the first cluster isn't empty
+      for (let i = 0; i < 3; i++) {
+        drawFrame(canvas, image, flatSubtitles, 0);
+        requestCanvasFrame(canvasStream);
+        await sleep(20);
+      }
+
+      const liveVideo = canvasStream.getVideoTracks().filter(t => t.readyState === 'live');
       if (liveVideo.length === 0) {
         throw new Error('無法擷取畫面，請重新整理後再試');
       }
 
-      mixedStream = new MediaStream([
-        ...liveVideo,
-        ...destination.stream.getAudioTracks(),
-      ]);
+      const liveAudio = destination.stream.getAudioTracks().filter(t => t.readyState === 'live');
+      if (liveAudio.length === 0) {
+        throw new Error('無法擷取音訊，請重新整理後再試');
+      }
+
+      mixedStream = new MediaStream([...liveVideo, ...liveAudio]);
 
       const chunks: Blob[] = [];
       try {
-        recorder = new MediaRecorder(mixedStream, { mimeType });
+        recorder = new MediaRecorder(mixedStream, {
+          mimeType,
+          videoBitsPerSecond: 2_500_000,
+          audioBitsPerSecond: 128_000,
+        });
       } catch {
-        // Fallback if codec combination is rejected mid-session
         recorder = new MediaRecorder(mixedStream);
         currentExt = 'webm';
       }
@@ -282,6 +280,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       let audioStartTime = 0;
       const ctx = audioContext;
       const rec = recorder;
+      const streamForFrames = canvasStream;
 
       await new Promise<void>((resolve, reject) => {
         let settled = false;
@@ -296,28 +295,30 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
           else resolve();
         };
 
-        // Hard timeout: start + duration + buffer, never hang forever
         const hardMs = Math.ceil(totalDuration * 1000) + 20_000;
         resources.timer = setTimeout(() => {
           try {
             if (rec.state === 'recording' || rec.state === 'paused') {
-              try { rec.requestData(); } catch { /* ignore */ }
+              try {
+                rec.requestData();
+              } catch {
+                /* ignore */
+              }
               rec.stop();
             }
           } catch {
             /* ignore */
           }
-          // Give onstop a moment; if still stuck, fail
           setTimeout(() => {
             finish(new Error('錄製逾時，請再試一次（可改用 WebM 或減少句數）'));
           }, 1500);
         }, hardMs);
 
         rec.onerror = () => finish(new Error('MediaRecorder 發生錯誤'));
-
         rec.onstop = () => finish();
 
         rec.onstart = () => {
+          // Schedule audio relative to the actual encoder start (avoids dropped head)
           void ctx.resume().then(() => {
             audioStartTime = ctx.currentTime;
 
@@ -329,6 +330,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               }
             }
 
+            // Wall-clock worker keeps painting even when the tab is backgrounded
             const workerCode = `
               let timer;
               self.onmessage = e => {
@@ -341,12 +343,22 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             );
             resources.worker = new Worker(resources.workerUrl);
 
+            // Prefer wall-clock elapsed for subtitles so progress stays correct
+            // even if AudioContext is throttled slightly.
+            const recordWallStart = performance.now();
+
             resources.worker.onmessage = () => {
-              const elapsed = ctx.currentTime - audioStartTime;
+              const wallElapsed = (performance.now() - recordWallStart) / 1000;
+              const audioElapsed = ctx.currentTime - audioStartTime;
+              // Use the larger of the two so we never under-draw near the end
+              const elapsed = Math.min(
+                totalDuration,
+                Math.max(wallElapsed, audioElapsed, 0),
+              );
               const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
               onStatus(`正在錄製影片 ${pct}%…`);
               drawFrame(canvas, image, flatSubtitles, elapsed);
-              requestCanvasFrame(liveCanvas);
+              requestCanvasFrame(streamForFrames);
             };
             resources.worker.postMessage('start');
 
@@ -357,12 +369,15 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
                 /* ignore */
               }
               drawFrame(canvas, image, flatSubtitles, Math.max(0, totalDuration - 0.01));
-              requestCanvasFrame(liveCanvas);
-              // Let the last frame flush into the encoder
+              requestCanvasFrame(streamForFrames);
               setTimeout(() => {
                 try {
                   if (rec.state === 'recording' || rec.state === 'paused') {
-                    try { rec.requestData(); } catch { /* ignore */ }
+                    try {
+                      rec.requestData();
+                    } catch {
+                      /* ignore */
+                    }
                     rec.stop();
                   } else if (!settled) {
                     finish();
@@ -370,21 +385,21 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
                 } catch (e) {
                   finish(e instanceof Error ? e : new Error(String(e)));
                 }
-              }, 120);
-            }, totalDuration * 1000 + 400);
+              }, 150);
+              // 1000ms timeslice needs a little extra tail so the last cluster flushes
+            }, totalDuration * 1000 + 500);
           }).catch(err => {
             finish(err instanceof Error ? err : new Error(String(err)));
           });
         };
 
         try {
-          // timeslice helps some browsers flush data reliably across multiple runs
-          rec.start(250);
+          // 1000ms timeslice → one WebM Cluster per second (better seeking / duration)
+          rec.start(1000);
         } catch (e) {
           finish(e instanceof Error ? e : new Error(String(e)));
         }
 
-        // If onstart never fires (broken stream), fail fast
         setTimeout(() => {
           if (!settled && rec.state === 'inactive') {
             finish(new Error('無法開始錄製，請再試一次'));
@@ -392,18 +407,22 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         }, 4000);
       });
 
-      // Brief pause so final cluster is delivered
-      await sleep(50);
+      await sleep(80);
 
-      // ── 4. Stop only AUDIO tracks from this run ────────────────
-      // Keep canvas video track LIVE so the next generation can reuse captureStream.
+      // ── 4. Stop audio tracks from this run ─────────────────────
       stopTracks(destination.stream, ['audio']);
-      // Also stop any audio that was added onto mixedStream (same tracks)
       if (mixedStream) {
         for (const t of mixedStream.getAudioTracks()) {
-          try { t.stop(); } catch { /* ignore */ }
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
         }
       }
+      // Always tear down this run's canvas stream (fresh next time)
+      stopTracks(canvasStream, ['video']);
+      canvasStream = null;
 
       // ── 5. Fix WebM duration & optionally convert ──────────────
       if (chunks.length === 0) {
@@ -411,26 +430,23 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       }
 
       let blob = new Blob(chunks, { type: rec.mimeType || mimeType });
+      if (blob.size < 1024) {
+        throw new Error('錄製檔案過小（可能無影格），請重新整理後再試');
+      }
 
-      if ((currentExt === 'webm' || blob.type.includes('webm')) && typeof ysFixWebmDuration !== 'undefined') {
-        blob = await new Promise<Blob>(res => {
-          try {
-            ysFixWebmDuration(blob, totalDuration * 1000, res);
-          } catch {
-            res(blob);
-          }
-        });
+      // Critical: MediaRecorder WebM often has Duration=0 without this fix
+      if (currentExt === 'webm' || blob.type.includes('webm')) {
+        blob = await fixWebmDuration(blob, totalDuration);
       }
 
       if (format === 'mp4' && (currentExt === 'webm' || blob.type.includes('webm'))) {
         onStatus('正在轉換為 MP4…');
         try {
           const mp4 = await fetchConvert(blob);
-          if (mp4) {
+          if (mp4 && mp4.size > 512) {
             blob = mp4;
             currentExt = 'mp4';
           } else {
-            // Typical on Vercel: no FFmpeg binary — WebM still plays in Chrome/Edge/Firefox
             onStatus('遠端無 FFmpeg，已輸出 WebM（瀏覽器可直接播放下載）');
             currentExt = 'webm';
           }
@@ -443,7 +459,6 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       return { blob, ext: currentExt, duration: totalDuration };
     } finally {
-      // Always release one-shot resources so the next run can start cleanly
       if (resources.timer) clearTimeout(resources.timer);
       try {
         resources.worker?.terminate();
@@ -452,11 +467,8 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       }
       if (resources.workerUrl) URL.revokeObjectURL(resources.workerUrl);
 
-      // If canvas track died, clear ref so next run recreates it
-      const cs = canvasStreamRef.current;
-      if (cs && !cs.getVideoTracks().some(t => t.readyState === 'live')) {
-        stopTracks(cs);
-        canvasStreamRef.current = null;
+      if (canvasStream) {
+        stopTracks(canvasStream);
       }
 
       if (audioContext) {
