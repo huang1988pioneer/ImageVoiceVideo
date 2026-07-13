@@ -60,8 +60,7 @@ export default function Home() {
     }
 
     setScript(
-      imageCache.loadScript() ||
-        '水電大學籌備處\n正在招募優秀人才\n歡迎加入我們的團隊',
+      imageCache.loadScript() || ''
     );
     imageCache.loadImage('last').then(blob => {
       if (!blob) return;
