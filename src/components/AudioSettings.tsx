@@ -54,6 +54,27 @@ const STYLE_OPTIONS: {
   },
 ];
 
+/** Visual mode: still image vs talking-head lip-sync */
+const VISUAL_OPTIONS: {
+  value: 'static' | 'lipsync';
+  label: string;
+  icon: string;
+  hint: string;
+}[] = [
+  {
+    value: 'static',
+    label: '靜態圖片',
+    icon: '🖼',
+    hint: '原圖固定 · 僅字幕變化',
+  },
+  {
+    value: 'lipsync',
+    label: '對口型',
+    icon: '🗣',
+    hint: '嘴巴跟語音同步',
+  },
+];
+
 export default function AudioSettings({
   audioStyle,
   rate,
@@ -201,26 +222,57 @@ export default function AudioSettings({
 
       <div className={styles.divider} role="separator" />
 
-      <label
-        className={`${styles.checkRow} ${!lipSyncAvailable ? styles.checkDisabled : ''}`}
-        htmlFor="lip-sync-toggle"
-      >
-        <input
-          id="lip-sync-toggle"
-          type="checkbox"
-          checked={lipSync && lipSyncAvailable}
-          disabled={!lipSyncAvailable}
-          onChange={e => onLipSync(e.target.checked)}
-        />
-        <span>
-          對口型（Talking Head）
-          <small className={styles.checkHint}>
-            {lipSyncAvailable
-              ? '人臉圖片嘴巴跟主音軌同步；需清晰正面人臉，生成較慢'
-              : lipSyncHint || '未設定 REPLICATE_API_TOKEN，無法使用對口型'}
-          </small>
-        </span>
-      </label>
+      <div className={styles.styleSection}>
+        <span className={styles.styleLabel}>畫面模式</span>
+        <div className={styles.styleGroup} role="radiogroup" aria-label="畫面模式">
+          {VISUAL_OPTIONS.map(opt => {
+            const isLipsync = opt.value === 'lipsync';
+            const disabled = isLipsync && !lipSyncAvailable;
+            const active =
+              opt.value === 'static' ? !lipSync : lipSync && lipSyncAvailable;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                id={`visual-mode-${opt.value}`}
+                role="radio"
+                aria-checked={active}
+                aria-disabled={disabled}
+                disabled={disabled}
+                className={`${styles.styleBtn} ${
+                  active ? styles.styleActive : ''
+                } ${
+                  opt.value === 'static' ? styles.styleVoice : styles.styleLipsync
+                } ${disabled ? styles.styleDisabled : ''}`}
+                onClick={() => {
+                  if (disabled) return;
+                  onLipSync(opt.value === 'lipsync');
+                }}
+                title={
+                  disabled
+                    ? lipSyncHint || '未設定 REPLICATE_API_TOKEN'
+                    : opt.hint
+                }
+              >
+                <span className={styles.styleIcon} aria-hidden>
+                  {opt.icon}
+                </span>
+                <span className={styles.styleText}>
+                  <span className={styles.styleName}>{opt.label}</span>
+                  <small className={styles.styleHint}>{opt.hint}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className={styles.presetHint}>
+          {lipSync && lipSyncAvailable
+            ? '對口型：人臉嘴巴跟主音軌同步。請用清晰正面人臉；生成較慢，需外部 API。'
+            : lipSyncAvailable
+              ? '靜態圖片：畫面維持原圖，只有語音與字幕會變化。可隨時切換為對口型。'
+              : `靜態圖片（預設）。對口型目前不可用：${lipSyncHint || '未設定 REPLICATE_API_TOKEN'}`}
+        </p>
+      </div>
 
       <div className={styles.divider} role="separator" />
 

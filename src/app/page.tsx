@@ -46,7 +46,7 @@ export default function Home() {
   const [lipSync, setLipSync] = useState(false);
   const [lipSyncAvailable, setLipSyncAvailable] = useState(false);
   const [lipSyncHint, setLipSyncHint] = useState<string | null>(null);
-  const [status, setStatus] = useState('就緒 — 上傳圖片並輸入語音稿');
+  const [status, setStatus] = useState('就緒 — 選擇畫面模式、上傳圖片並輸入語音稿');
   const [recording, setRecording] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultExt, setResultExt] = useState('mp4');
@@ -89,6 +89,7 @@ export default function Home() {
     void fetchLipsyncAvailable().then(avail => {
       setLipSyncAvailable(avail.available);
       setLipSyncHint(avail.reason);
+      // Default remains 靜態圖片; only force-off if service missing
       if (!avail.available) setLipSync(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -341,7 +342,14 @@ export default function Home() {
               onOrientation={handleOrientation}
               onFilename={setFilename}
               onBgmChange={handleBgmChange}
-              onLipSync={setLipSync}
+              onLipSync={enabled => {
+                setLipSync(enabled);
+                setStatus(
+                  enabled
+                    ? '已選「對口型」：嘴巴會跟主音軌同步（需正面人臉）'
+                    : '已選「靜態圖片」：畫面固定，僅語音與字幕變化',
+                );
+              }}
             />
           </div>
         </div>
@@ -395,6 +403,9 @@ export default function Home() {
                 </span>
                 <span className={styles.previewMetaTag}>
                   {lineCount} 段 · {trackCount} 語
+                </span>
+                <span className={styles.previewMetaTag}>
+                  {lipSync && lipSyncAvailable ? '對口型' : '靜態圖片'}
                 </span>
               </div>
             </div>

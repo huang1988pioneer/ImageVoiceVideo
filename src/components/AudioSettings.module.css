@@ -99,6 +99,29 @@
   box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.22);
 }
 
+/* 對口型 active */
+.styleLipsync.styleActive {
+  border-color: rgba(96, 165, 250, 0.8) !important;
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.2),
+    rgba(20, 184, 166, 0.1)
+  ) !important;
+  color: #bfdbfe !important;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25);
+}
+
+.styleDisabled {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+}
+
+.styleDisabled:hover {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
 .presetHint {
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.42);
