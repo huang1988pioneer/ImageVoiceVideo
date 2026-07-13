@@ -76,8 +76,8 @@ function requestCanvasFrame(stream: MediaStream) {
  * Reusing a previous track often yields 0-duration / empty WebM in Chrome.
  */
 function createCanvasStream(canvas: HTMLCanvasElement): MediaStream {
-  // Set framerate to 24fps as requested
-  return canvas.captureStream(24);
+  // Set framerate to 30fps as requested (above 24fps)
+  return canvas.captureStream(30);
 }
 
 export function useVideoRecorder(onStatus: (msg: string) => void) {
@@ -264,9 +264,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       try {
         recorder = new MediaRecorder(mixedStream, {
           mimeType,
-          // Bitrate set to 1 Mbps (1,000,000 bps) as requested
+          // Bitrate set to 2.5 Mbps (2,500,000 bps) as requested (above 1Mbps)
           // while keeping file size under 4MB Vercel limit for typical short videos.
-          videoBitsPerSecond: 1_000_000,
+          videoBitsPerSecond: 2_500_000,
           audioBitsPerSecond: 128_000,
         });
       } catch {
