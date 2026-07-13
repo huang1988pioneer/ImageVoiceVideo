@@ -1,13 +1,20 @@
 'use client';
 import { useCallback, useRef } from 'react';
-import { fetchTTSBatch, fetchTranslate, fetchConvert } from '@/lib/api';
+import {
+  fetchTTSBatch,
+  fetchTranslate,
+  fetchConvert,
+  startLipsyncJob,
+  pollLipsyncUntilDone,
+} from '@/lib/api';
+import { exportSpeechToWav } from '@/lib/exportSpeechAudio';
 import {
   FRAME_INTERVAL_MS,
   VIDEO_FPS,
   mediaRecorderBitrateOptions,
 } from '@/lib/videoQuality';
 import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
-import type { SubtitleLine } from './useCanvasRenderer';
+import type { SubtitleLine, VisualSource } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
 import {
   analyzeLyricsForMusic,
@@ -26,6 +33,8 @@ export interface RecordingOptions {
   scriptLines: ScriptLine[];
   tracks: Track[];
   image: HTMLImageElement | null;
+  /** Original image file for lipsync upload (required when lipSync) */
+  imageBlob?: Blob | null;
   canvas: HTMLCanvasElement;
   format: 'mp4' | 'webm';
   rate: number;
@@ -42,6 +51,8 @@ export interface RecordingOptions {
    * Requires builtin lyric-seeded BGM for best effect.
    */
   singToBgm?: boolean;
+  /** True talking-head lip-sync via external provider */
+  lipSync?: boolean;
 }
 
 export interface RecordingResult {
@@ -121,11 +132,13 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
     const {
       scriptLines, tracks, image, canvas,
+      imageBlob = null,
       format, rate, volume, scriptLanguage,
       pitch = 0,
       bgm,
       bgmArrayBuffer = null,
       singToBgm = false,
+      lipSync = false,
     } = opts;
 
     const { mimeType, ext } = chooseMime(format);
@@ -136,6 +149,8 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
     let canvasStream: MediaStream | null = null;
     let mixedStream: MediaStream | null = null;
     let recorder: MediaRecorder | null = null;
+    let lipsyncVideoEl: HTMLVideoElement | null = null;
+    let lipsyncObjectUrl: string | null = null;
     const resources: {
       worker: Worker | null;
       workerUrl: string | null;
@@ -262,7 +277,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         segmentStarts = timeline.segmentStarts;
         totalDuration = timeline.totalDuration;
         onStatus(
-          `嗨歌對拍：${musicProfile.styleName} · ${musicProfile.bpm} BPM · 共 ${scriptLines.length} 句`,
+          `語音+背景音樂：${musicProfile.styleName} · ${musicProfile.bpm} BPM · 共 ${scriptLines.length} 句`,
         );
       } else {
         segmentStarts = segmentDurations.reduce<number[]>((starts, _dur, idx) => {
@@ -359,18 +374,86 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       }
       const flatSubtitles = allSubtitleTracks.flat();
 
+      // ── 2c. Optional true lip-sync (talking head) ────────────────
+      // Drive mouth with primary speech track only (no BGM).
+      let visual: VisualSource | null = image;
+
+      if (lipSync) {
+        if (!imageBlob || imageBlob.size < 32) {
+          throw new Error('對口型需要原始圖片檔，請重新上傳圖片後再試');
+        }
+        if (abortRef.current) throw new Error('已取消');
+
+        // Primary track: script language match, else first track
+        let primaryIdx = tracks.findIndex(t => t.language === scriptLanguage);
+        if (primaryIdx < 0) primaryIdx = 0;
+        const primaryBuffers = trackBuffers[primaryIdx];
+        if (!primaryBuffers?.length) {
+          throw new Error('對口型找不到主音軌語音');
+        }
+
+        onStatus('正在匯出語音軌以生成對口…');
+        const speechBlob = await exportSpeechToWav(
+          primaryBuffers.map((buffer, i) => ({
+            buffer,
+            startAt: segmentStarts[i],
+          })),
+          totalDuration,
+        );
+
+        if (abortRef.current) throw new Error('已取消');
+        onStatus('正在上傳對口素材…');
+        const { jobId } = await startLipsyncJob(imageBlob, speechBlob);
+        if (abortRef.current) throw new Error('已取消');
+
+        const { objectUrl } = await pollLipsyncUntilDone(jobId, onStatus);
+        lipsyncObjectUrl = objectUrl;
+
+        onStatus('正在載入對口影片…');
+        lipsyncVideoEl = document.createElement('video');
+        lipsyncVideoEl.muted = true;
+        lipsyncVideoEl.playsInline = true;
+        lipsyncVideoEl.preload = 'auto';
+        lipsyncVideoEl.src = objectUrl;
+
+        await new Promise<void>((resolve, reject) => {
+          const v = lipsyncVideoEl!;
+          let settled = false;
+          const finish = (err?: Error) => {
+            if (settled) return;
+            settled = true;
+            v.removeEventListener('loadeddata', onReady);
+            v.removeEventListener('error', onErr);
+            if (err) reject(err);
+            else resolve();
+          };
+          const onReady = () => finish();
+          const onErr = () => finish(new Error('對口影片無法播放'));
+          v.addEventListener('loadeddata', onReady);
+          v.addEventListener('error', onErr);
+          v.load();
+          setTimeout(() => {
+            if (v.readyState >= 2) finish();
+            else finish(new Error('對口影片載入逾時'));
+          }, 20_000);
+        });
+
+        visual = lipsyncVideoEl;
+        onStatus('對口動畫就緒，開始錄製…');
+      }
+
       // ── 3. Canvas stream + MediaRecorder ────────────────────────
       // Ensure context is running before we attach streams / start encoder
       if (audioContext.state !== 'running') {
         await audioContext.resume();
       }
 
-      drawFrame(canvas, image, flatSubtitles, 0);
+      drawFrame(canvas, visual, flatSubtitles, 0);
 
       canvasStream = createCanvasStream(canvas);
       // Paint + push a few frames so the first cluster isn't empty
       for (let i = 0; i < 3; i++) {
-        drawFrame(canvas, image, flatSubtitles, 0);
+        drawFrame(canvas, visual, flatSubtitles, 0);
         requestCanvasFrame(canvasStream);
         await sleep(20);
       }
@@ -457,6 +540,20 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               }
             }
 
+            // Sync talking-head video to recorder start (audio graph owns sound)
+            if (lipsyncVideoEl) {
+              try {
+                lipsyncVideoEl.pause();
+                lipsyncVideoEl.currentTime = 0;
+                const playPromise = lipsyncVideoEl.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                  playPromise.catch(err => console.warn('lipsync video.play failed', err));
+                }
+              } catch (e) {
+                console.warn('lipsync video start failed', e);
+              }
+            }
+
             // Loop BGM under TTS for the full video length
             if (bgmPlan) {
               try {
@@ -500,6 +597,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             // Prefer wall-clock elapsed for subtitles so progress stays correct
             // even if AudioContext is throttled slightly.
             const recordWallStart = performance.now();
+            const activeVisual = visual;
 
             resources.worker.onmessage = () => {
               const wallElapsed = (performance.now() - recordWallStart) / 1000;
@@ -511,7 +609,23 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               );
               const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
               onStatus(`正在錄製影片 ${pct}% (請勿切換分頁或關閉螢幕，否則會中斷)…`);
-              drawFrame(canvas, image, flatSubtitles, elapsed);
+
+              // Soft-correct lipsync video drift vs wall/audio clock
+              if (lipsyncVideoEl && lipsyncVideoEl.readyState >= 2) {
+                const drift = Math.abs(lipsyncVideoEl.currentTime - elapsed);
+                if (drift > 0.08) {
+                  try {
+                    lipsyncVideoEl.currentTime = Math.min(
+                      elapsed,
+                      Math.max(0, lipsyncVideoEl.duration || elapsed),
+                    );
+                  } catch {
+                    /* ignore seek errors mid-play */
+                  }
+                }
+              }
+
+              drawFrame(canvas, activeVisual, flatSubtitles, elapsed);
               requestCanvasFrame(streamForFrames);
             };
             resources.worker.postMessage('start');
@@ -522,7 +636,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               } catch {
                 /* ignore */
               }
-              drawFrame(canvas, image, flatSubtitles, Math.max(0, totalDuration - 0.01));
+              drawFrame(canvas, activeVisual, flatSubtitles, Math.max(0, totalDuration - 0.01));
               requestCanvasFrame(streamForFrames);
               setTimeout(() => {
                 try {
@@ -623,6 +737,25 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       if (canvasStream) {
         stopTracks(canvasStream);
+      }
+
+      if (lipsyncVideoEl) {
+        try {
+          lipsyncVideoEl.pause();
+          lipsyncVideoEl.removeAttribute('src');
+          lipsyncVideoEl.load();
+        } catch {
+          /* ignore */
+        }
+        lipsyncVideoEl = null;
+      }
+      if (lipsyncObjectUrl) {
+        try {
+          URL.revokeObjectURL(lipsyncObjectUrl);
+        } catch {
+          /* ignore */
+        }
+        lipsyncObjectUrl = null;
       }
 
       if (audioContext) {

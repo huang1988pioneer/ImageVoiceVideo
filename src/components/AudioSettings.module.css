@@ -87,7 +87,7 @@
   box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.2);
 }
 
-/* 預設嗨歌 active */
+/* 語音+背景音樂 active */
 .styleHype.styleActive {
   border-color: rgba(244, 114, 182, 0.75) !important;
   background: linear-gradient(
@@ -207,6 +207,15 @@
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.4);
   font-weight: 500;
+}
+
+.checkDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.checkDisabled input {
+  cursor: not-allowed;
 }
 
 .row {

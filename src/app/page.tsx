@@ -21,6 +21,7 @@ import {
   type AudioStyleMode,
   type BgmSettings,
 } from '@/lib/bgm';
+import { fetchLipsyncAvailable } from '@/lib/api';
 import styles from './page.module.css';
 
 const ORIENT_STORAGE_KEY = 'ivv-orientation-mode';
@@ -28,6 +29,7 @@ const ORIENT_STORAGE_KEY = 'ivv-orientation-mode';
 export default function Home() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
+  const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [script, setScript] = useState('');
   const [scriptLang, setScriptLang] = useState('zh-TW');
   const [tracks, setTracks] = useState<Track[]>([
@@ -41,6 +43,9 @@ export default function Home() {
   const [format, setFormat] = useState<'mp4' | 'webm'>('mp4');
   const [orientationMode, setOrientationMode] = useState<OrientationMode>('auto');
   const [filename, setFilename] = useState('');
+  const [lipSync, setLipSync] = useState(false);
+  const [lipSyncAvailable, setLipSyncAvailable] = useState(false);
+  const [lipSyncHint, setLipSyncHint] = useState<string | null>(null);
   const [status, setStatus] = useState('就緒 — 上傳圖片並輸入語音稿');
   const [recording, setRecording] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
@@ -73,11 +78,18 @@ export default function Home() {
     );
     imageCache.loadImage('last').then(blob => {
       if (!blob) return;
+      setImageBlob(blob);
       const url = URL.createObjectURL(blob);
       setImageUrl(url);
       const img = new Image();
       img.src = url;
       img.onload = () => setImageEl(img);
+    });
+
+    void fetchLipsyncAvailable().then(avail => {
+      setLipSyncAvailable(avail.available);
+      setLipSyncHint(avail.reason);
+      if (!avail.available) setLipSync(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -103,6 +115,7 @@ export default function Home() {
 
   const handleImage = useCallback(
     (blob: Blob, url: string) => {
+      setImageBlob(blob);
       setImageUrl(prev => {
         if (prev) URL.revokeObjectURL(prev);
         return url;
@@ -145,7 +158,7 @@ export default function Home() {
     setBgm({ ...preset.bgm });
     setStatus(
       style === 'hype'
-        ? '已選「預設嗨歌」：依歌詞隨機生成 BGM，並對拍嗨唱'
+        ? '已選「語音+背景音樂」：旁白 + 依歌詞隨機生成 BGM'
         : '已選「純語音」：正常旁白、無 BGM',
     );
   }, []);
@@ -188,6 +201,7 @@ export default function Home() {
         scriptLines,
         tracks,
         image: imageEl,
+        imageBlob,
         canvas,
         format,
         rate,
@@ -197,14 +211,16 @@ export default function Home() {
         bgm: effectiveBgm,
         bgmArrayBuffer: null,
         singToBgm,
+        lipSync: lipSync && lipSyncAvailable,
       });
       const url = URL.createObjectURL(result.blob);
       resultUrlRef.current = url;
       setResultUrl(url);
       setResultExt(result.ext);
-      const styleLabel = audioStyle === 'hype' ? '嗨歌' : '純語音';
+      const styleLabel = audioStyle === 'hype' ? '語音+背景音樂' : '純語音';
+      const lipLabel = lipSync && lipSyncAvailable ? ' · 對口' : '';
       setStatus(
-        `完成！${styleLabel} · ${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒 — 可繼續生成`,
+        `完成！${styleLabel}${lipLabel} · ${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒 — 可繼續生成`,
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -218,6 +234,7 @@ export default function Home() {
     script,
     tracks,
     imageEl,
+    imageBlob,
     format,
     rate,
     volume,
@@ -225,6 +242,8 @@ export default function Home() {
     bgm,
     audioStyle,
     scriptLang,
+    lipSync,
+    lipSyncAvailable,
     record,
     canvasSize,
   ]);
@@ -311,6 +330,9 @@ export default function Home() {
               orientation={orientationMode}
               filename={filename}
               bgm={bgm}
+              lipSync={lipSync}
+              lipSyncAvailable={lipSyncAvailable}
+              lipSyncHint={lipSyncHint}
               onAudioStyle={handleAudioStyle}
               onRate={setRate}
               onPitch={setPitch}
@@ -319,6 +341,7 @@ export default function Home() {
               onOrientation={handleOrientation}
               onFilename={setFilename}
               onBgmChange={handleBgmChange}
+              onLipSync={setLipSync}
             />
           </div>
         </div>
@@ -390,7 +413,11 @@ export default function Home() {
               onClick={handleGenerate}
               disabled={recording}
             >
-              {recording ? '生成中…' : '生成影片'}
+              {recording
+                ? '生成中…'
+                : lipSync && lipSyncAvailable
+                  ? '生成對口影片'
+                  : '生成影片'}
             </button>
           </div>
 
@@ -429,7 +456,11 @@ export default function Home() {
           onClick={handleGenerate}
           disabled={recording}
         >
-          {recording ? '生成中…' : '生成影片'}
+          {recording
+            ? '生成中…'
+            : lipSync && lipSyncAvailable
+              ? '生成對口影片'
+              : '生成影片'}
         </button>
       </div>
     </main>

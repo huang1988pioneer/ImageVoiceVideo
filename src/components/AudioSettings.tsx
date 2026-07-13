@@ -13,6 +13,10 @@ interface Props {
   orientation: OrientationMode;
   filename: string;
   bgm: BgmSettings;
+  /** Talking-head lip-sync */
+  lipSync: boolean;
+  lipSyncAvailable: boolean;
+  lipSyncHint?: string | null;
   onAudioStyle: (style: AudioStyleMode) => void;
   onRate: (v: number) => void;
   onPitch: (v: number) => void;
@@ -21,6 +25,7 @@ interface Props {
   onOrientation: (v: OrientationMode) => void;
   onFilename: (v: string) => void;
   onBgmChange: (partial: Partial<BgmSettings>) => void;
+  onLipSync: (v: boolean) => void;
 }
 
 const ORIENT_OPTIONS: { value: OrientationMode; label: string; hint: string }[] = [
@@ -43,9 +48,9 @@ const STYLE_OPTIONS: {
   },
   {
     value: 'hype',
-    label: '預設嗨歌',
+    label: '語音+背景音樂',
     icon: '♪',
-    hint: '歌詞生成 BGM · 對拍嗨唱',
+    hint: '旁白 + 歌詞生成 BGM',
   },
 ];
 
@@ -58,6 +63,9 @@ export default function AudioSettings({
   orientation,
   filename,
   bgm,
+  lipSync,
+  lipSyncAvailable,
+  lipSyncHint,
   onAudioStyle,
   onRate,
   onPitch,
@@ -66,6 +74,7 @@ export default function AudioSettings({
   onOrientation,
   onFilename,
   onBgmChange,
+  onLipSync,
 }: Props) {
   const isHype = audioStyle === 'hype';
 
@@ -102,7 +111,7 @@ export default function AudioSettings({
         </div>
         <p className={styles.presetHint}>
           {isHype
-            ? '依歌詞隨機生成背景音樂，語音對拍並帶旋律音高變化（Edge TTS 嗨唱感，非專業翻唱）。每次生成曲風／BPM 會不同。'
+            ? '語音旁白加上依歌詞隨機生成的背景音樂；旁白會對拍並帶輕微旋律音高變化。每次生成曲風／BPM 會不同。'
             : `純語音：${VOICE_PRESET.volume}% 音量、無背景音樂。可微調語速／音高。`}
         </p>
       </div>
@@ -192,6 +201,29 @@ export default function AudioSettings({
 
       <div className={styles.divider} role="separator" />
 
+      <label
+        className={`${styles.checkRow} ${!lipSyncAvailable ? styles.checkDisabled : ''}`}
+        htmlFor="lip-sync-toggle"
+      >
+        <input
+          id="lip-sync-toggle"
+          type="checkbox"
+          checked={lipSync && lipSyncAvailable}
+          disabled={!lipSyncAvailable}
+          onChange={e => onLipSync(e.target.checked)}
+        />
+        <span>
+          對口型（Talking Head）
+          <small className={styles.checkHint}>
+            {lipSyncAvailable
+              ? '人臉圖片嘴巴跟主音軌同步；需清晰正面人臉，生成較慢'
+              : lipSyncHint || '未設定 REPLICATE_API_TOKEN，無法使用對口型'}
+          </small>
+        </span>
+      </label>
+
+      <div className={styles.divider} role="separator" />
+
       <div className={styles.row}>
         <span className={styles.label}>畫面方向</span>
         <div className={styles.formatGroup} role="group" aria-label="畫面方向">
@@ -236,21 +268,23 @@ export default function AudioSettings({
       <div className={styles.filenameRow}>
         <label className={styles.label} htmlFor="filename-input">
           輸出檔名
-          {isHype && <span className={styles.val}> · 會標註嗨歌</span>}
+          {isHype && <span className={styles.val}> · 會標註語音BGM</span>}
         </label>
         <div className={styles.filenameInput}>
           <input
             id="filename-input"
             type="text"
             placeholder={
-              isHype ? '預設：第一行_嗨歌' : '預設使用第一行文字'
+              isHype ? '預設：第一行_語音BGM' : '預設使用第一行文字'
             }
             value={filename}
             onChange={e => onFilename(e.target.value)}
             className={styles.input}
           />
           <span className={styles.ext}>
-            {isHype && !filename.includes('嗨歌') ? '_嗨歌' : ''}.{format}
+            {isHype && !filename.includes('語音BGM') && !filename.includes('嗨歌')
+              ? '_語音BGM'
+              : ''}.{format}
           </span>
         </div>
       </div>

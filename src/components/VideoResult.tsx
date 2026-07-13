@@ -10,7 +10,7 @@ interface Props {
   firstLine: string;
   customFilename: string;
   orientation?: Orientation;
-  /** When hype, download name is tagged with 嗨歌 */
+  /** When hype (voice+BGM), download name is tagged with 語音BGM */
   audioStyle?: AudioStyleMode;
   onClear: () => void;
 }

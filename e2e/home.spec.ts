@@ -37,18 +37,18 @@ test.describe('Image Voice Video — home', () => {
     await expect(page.locator('#audio-style-hype')).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('#bgm-volume-slider')).toBeVisible();
     await expect(page.locator('#bgm-duck')).toBeChecked();
-    await expect(page.locator('.status-bar')).toContainText(/嗨歌|BGM|對拍/);
+    await expect(page.locator('.status-bar')).toContainText(/語音\+背景音樂|BGM/);
 
     await page.locator('#audio-style-voice').click();
     await expect(page.locator('#audio-style-voice')).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('#bgm-volume-slider')).toHaveCount(0);
     await expect(page.locator('.status-bar')).toContainText(/純語音/);
 
-    // Hype style tags download filename with 嗨歌
+    // Voice+BGM style tags download filename
     await page.locator('#audio-style-hype').click();
     await expect(page.locator('#filename-input')).toHaveAttribute(
       'placeholder',
-      /嗨歌/,
+      /語音BGM/,
     );
   });
 

@@ -28,10 +28,26 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines;
 }
 
+/** Still photo or talking-head video frame source */
+export type VisualSource = HTMLImageElement | HTMLVideoElement;
+
+function visualSize(visual: VisualSource): { w: number; h: number } | null {
+  if (visual instanceof HTMLVideoElement) {
+    const w = visual.videoWidth;
+    const h = visual.videoHeight;
+    if (w > 0 && h > 0) return { w, h };
+    return null;
+  }
+  const w = visual.naturalWidth;
+  const h = visual.naturalHeight;
+  if (w > 0 && h > 0) return { w, h };
+  return null;
+}
+
 export function useCanvasRenderer() {
   const drawFrame = useCallback((
     canvas: HTMLCanvasElement,
-    image: HTMLImageElement | null,
+    visual: VisualSource | null,
     subtitleLines: SubtitleLine[],
     elapsed: number,
     showAll = false,
@@ -52,29 +68,30 @@ export function useCanvasRenderer() {
 
     // ── Background ───────────────────────────────────────────────
     // 1. Draw blurred background (cover fit) to fill empty space
-    // 2. Draw complete image (contain fit) so it's fully visible
+    // 2. Draw complete image/video (contain fit) so it's fully visible
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0a0f18';
     ctx.fillRect(0, 0, W, H);
 
-    if (image && image.naturalWidth > 0) {
+    const size = visual ? visualSize(visual) : null;
+    if (visual && size) {
       // Blurred background
-      const coverScale = Math.max(W / image.naturalWidth, H / image.naturalHeight);
-      const coverW = image.naturalWidth * coverScale;
-      const coverH = image.naturalHeight * coverScale;
+      const coverScale = Math.max(W / size.w, H / size.h);
+      const coverW = size.w * coverScale;
+      const coverH = size.h * coverScale;
       const coverX = (W - coverW) / 2;
       const coverY = (H - coverH) / 2;
 
       ctx.save();
       ctx.filter = 'blur(24px) brightness(0.5)';
-      ctx.drawImage(image, coverX, coverY, coverW, coverH);
+      ctx.drawImage(visual, coverX, coverY, coverW, coverH);
       ctx.restore();
 
-      // Complete uncropped image
-      const imgScale = Math.min(W / image.naturalWidth, H / image.naturalHeight);
-      const sw = image.naturalWidth * imgScale;
-      const sh = image.naturalHeight * imgScale;
-      ctx.drawImage(image, (W - sw) / 2, (H - sh) / 2, sw, sh);
+      // Complete uncropped frame
+      const imgScale = Math.min(W / size.w, H / size.h);
+      const sw = size.w * imgScale;
+      const sh = size.h * imgScale;
+      ctx.drawImage(visual, (W - sw) / 2, (H - sh) / 2, sw, sh);
     }
 
     // ── Active subtitles (text only, no black box) ───────────────

@@ -16,7 +16,7 @@ export const DEFAULT_BGM: BgmSettings = {
   duck: true,
 };
 
-/** Primary audio style: pure TTS vs default hype song feel */
+/** Primary audio style: pure TTS vs voice + background music */
 export type AudioStyleMode = 'voice' | 'hype';
 
 /** Pure voice — normal TTS, no BGM */
@@ -31,7 +31,7 @@ export const VOICE_PRESET = {
   },
 };
 
-/** Default hype — faster / higher pitch + lyric-seeded BGM */
+/** Voice + BGM — slightly brighter TTS + lyric-seeded background music */
 export const HYPE_PRESET = {
   rate: 3,
   pitch: 2,
