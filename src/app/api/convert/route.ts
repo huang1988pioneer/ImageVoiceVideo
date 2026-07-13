@@ -39,20 +39,21 @@ export async function POST(req: NextRequest) {
     await writeFile(inPath, buf);
     console.log(`[Convert] WebM ${buf.length.toLocaleString()} bytes → MP4 via ${ffmpegPath}`);
 
+    // veryfast: better for serverless / remote where wall-clock is limited
     await execFileAsync(
       ffmpegPath,
       [
         '-y',
         '-i', inPath,
         '-c:v', 'libx264',
-        '-preset', 'fast',
-        '-crf', '22',
+        '-preset', 'veryfast',
+        '-crf', '23',
         '-c:a', 'aac',
-        '-b:a', '160k',
+        '-b:a', '128k',
         '-movflags', '+faststart',
         outPath,
       ],
-      { timeout: 300_000 },
+      { timeout: 55_000 },
     );
 
     const mp4 = await readFile(outPath);

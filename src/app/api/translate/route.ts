@@ -1,4 +1,5 @@
 export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { isSupportedLanguage, toSourceCode, toTranslateCode } from '@/lib/languages';
@@ -20,6 +21,8 @@ async function translateOne(
     headers: { 'User-Agent': 'Mozilla/5.0' },
     // avoid Next.js fetch cache for dynamic translations
     cache: 'no-store',
+    // remote (Vercel) can hang if Google is slow — fail fast per line
+    signal: AbortSignal.timeout(12_000),
   });
 
   if (!res.ok) {

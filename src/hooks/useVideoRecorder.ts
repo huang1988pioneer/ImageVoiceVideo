@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useRef } from 'react';
-import { fetchTTS, fetchTranslate, fetchConvert } from '@/lib/api';
+import { fetchTTSBatch, fetchTranslate, fetchConvert } from '@/lib/api';
 import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
 import type { SubtitleLine } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
@@ -160,7 +160,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         );
       }
 
-      // ── 2. Build audio (TTS) ────────────────────────────────────
+      // ── 2. Build audio (TTS) — batch per track (one WS per voice on server) ──
       onStatus('正在生成語音…');
       destination = audioContext.createMediaStreamDestination();
 
@@ -172,14 +172,22 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       for (let t = 0; t < tracks.length; t++) {
         const track = tracks[t];
         const spoken = spokenByTrack[t];
+        if (abortRef.current) throw new Error('已取消');
+
+        onStatus(`正在生成語音 ${track.label || track.language}…`);
+
+        const items = spoken.map((text, i) => ({
+          text,
+          language: track.language,
+          gender: resolveGender(scriptLines[i], track),
+        }));
+
+        const abs = await fetchTTSBatch(items, rate, volume, (done, total) => {
+          onStatus(`正在生成語音 ${track.label || track.language} ${done}/${total}…`);
+        });
+
         const buffers: AudioBuffer[] = [];
-
-        for (let i = 0; i < scriptLines.length; i++) {
-          if (abortRef.current) throw new Error('已取消');
-          onStatus(`正在生成語音 ${track.label || track.language} ${i + 1}/${scriptLines.length}…`);
-
-          const gender = resolveGender(scriptLines[i], track);
-          const ab = await fetchTTS(spoken[i], track.language, gender, rate, volume);
+        for (const ab of abs) {
           // slice so the buffer can be decoded even if the original is detached
           const audioBuf = await audioContext.decodeAudioData(ab.slice(0));
           buffers.push(audioBuf);
@@ -289,14 +297,20 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         };
 
         // Hard timeout: start + duration + buffer, never hang forever
-        const hardMs = Math.ceil(totalDuration * 1000) + 15_000;
+        const hardMs = Math.ceil(totalDuration * 1000) + 20_000;
         resources.timer = setTimeout(() => {
           try {
-            if (rec.state === 'recording') rec.stop();
+            if (rec.state === 'recording' || rec.state === 'paused') {
+              try { rec.requestData(); } catch { /* ignore */ }
+              rec.stop();
+            }
           } catch {
             /* ignore */
           }
-          finish(new Error('錄製逾時，請再試一次'));
+          // Give onstop a moment; if still stuck, fail
+          setTimeout(() => {
+            finish(new Error('錄製逾時，請再試一次（可改用 WebM 或減少句數）'));
+          }, 1500);
         }, hardMs);
 
         rec.onerror = () => finish(new Error('MediaRecorder 發生錯誤'));
@@ -348,6 +362,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               setTimeout(() => {
                 try {
                   if (rec.state === 'recording' || rec.state === 'paused') {
+                    try { rec.requestData(); } catch { /* ignore */ }
                     rec.stop();
                   } else if (!settled) {
                     finish();
@@ -355,8 +370,8 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
                 } catch (e) {
                   finish(e instanceof Error ? e : new Error(String(e)));
                 }
-              }, 80);
-            }, totalDuration * 1000 + 300);
+              }, 120);
+            }, totalDuration * 1000 + 400);
           }).catch(err => {
             finish(err instanceof Error ? err : new Error(String(err)));
           });
@@ -415,7 +430,8 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             blob = mp4;
             currentExt = 'mp4';
           } else {
-            onStatus('FFmpeg 未安裝，保留 WebM 格式。');
+            // Typical on Vercel: no FFmpeg binary — WebM still plays in Chrome/Edge/Firefox
+            onStatus('遠端無 FFmpeg，已輸出 WebM（瀏覽器可直接播放下載）');
             currentExt = 'webm';
           }
         } catch (e) {
