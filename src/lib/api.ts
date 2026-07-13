@@ -20,13 +20,14 @@ export async function fetchTTS(
   gender: 'female' | 'male',
   rate: number,
   volume: number,
+  pitch = 0,
 ): Promise<ArrayBuffer> {
   const { signal, clear } = abortableTimeout(35_000);
   try {
     const res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, language, gender, rate, volume }),
+      body: JSON.stringify({ text, language, gender, rate, volume, pitch }),
       signal,
     });
     if (!res.ok) {
@@ -55,6 +56,7 @@ export async function fetchTTSBatch(
   rate: number,
   volume: number,
   onProgress?: (done: number, total: number) => void,
+  pitch = 0,
 ): Promise<ArrayBuffer[]> {
   if (items.length === 0) return [];
 
@@ -71,7 +73,7 @@ export async function fetchTTSBatch(
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: slice, rate, volume }),
+        body: JSON.stringify({ items: slice, rate, volume, pitch }),
         signal,
       });
       if (!res.ok) {

@@ -15,6 +15,12 @@ import {
   orientationLabel,
   type OrientationMode,
 } from '@/lib/videoSize';
+import {
+  DEFAULT_BGM,
+  presetForStyle,
+  type AudioStyleMode,
+  type BgmSettings,
+} from '@/lib/bgm';
 import styles from './page.module.css';
 
 const ORIENT_STORAGE_KEY = 'ivv-orientation-mode';
@@ -27,8 +33,11 @@ export default function Home() {
   const [tracks, setTracks] = useState<Track[]>([
     { language: 'zh-TW', label: '繁中', gender: 'female' },
   ]);
+  const [audioStyle, setAudioStyle] = useState<AudioStyleMode>('voice');
   const [rate, setRate] = useState(0);
+  const [pitch, setPitch] = useState(0);
   const [volume, setVolume] = useState(100);
+  const [bgm, setBgm] = useState<BgmSettings>(DEFAULT_BGM);
   const [format, setFormat] = useState<'mp4' | 'webm'>('mp4');
   const [orientationMode, setOrientationMode] = useState<OrientationMode>('auto');
   const [filename, setFilename] = useState('');
@@ -123,6 +132,24 @@ export default function Home() {
     }
   }, []);
 
+  const handleBgmChange = useCallback((partial: Partial<BgmSettings>) => {
+    setBgm(prev => ({ ...prev, ...partial }));
+  }, []);
+
+  const handleAudioStyle = useCallback((style: AudioStyleMode) => {
+    setAudioStyle(style);
+    const preset = presetForStyle(style);
+    setRate(preset.rate);
+    setPitch(preset.pitch);
+    setVolume(preset.volume);
+    setBgm({ ...preset.bgm });
+    setStatus(
+      style === 'hype'
+        ? '已選「預設嗨歌」：快語速 + 抬音高 + 內建節拍 BGM'
+        : '已選「純語音」：正常旁白、無 BGM',
+    );
+  }, []);
+
   const handleGenerate = useCallback(async () => {
     if (recording) return;
 
@@ -149,6 +176,12 @@ export default function Home() {
     setRecording(true);
     setStatus('準備生成…');
 
+    // Enforce style BGM mode so pure voice never ships with leftover BGM
+    const effectiveBgm: BgmSettings =
+      audioStyle === 'hype'
+        ? { ...bgm, mode: 'builtin' }
+        : { ...bgm, mode: 'off' };
+
     try {
       const result = await record({
         scriptLines,
@@ -158,14 +191,18 @@ export default function Home() {
         format,
         rate,
         volume,
+        pitch,
         scriptLanguage: scriptLang,
+        bgm: effectiveBgm,
+        bgmArrayBuffer: null,
       });
       const url = URL.createObjectURL(result.blob);
       resultUrlRef.current = url;
       setResultUrl(url);
       setResultExt(result.ext);
+      const styleLabel = audioStyle === 'hype' ? '嗨歌' : '純語音';
       setStatus(
-        `完成！${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒 — 可繼續生成`,
+        `完成！${styleLabel} · ${canvasSize.label} ${canvasSize.orientation === 'landscape' ? '橫式' : '直式'} · ${result.duration.toFixed(1)} 秒 — 可繼續生成`,
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -182,6 +219,9 @@ export default function Home() {
     format,
     rate,
     volume,
+    pitch,
+    bgm,
+    audioStyle,
     scriptLang,
     record,
     canvasSize,
@@ -261,16 +301,22 @@ export default function Home() {
               <span className={styles.step}>4</span>
             </div>
             <AudioSettings
+              audioStyle={audioStyle}
               rate={rate}
+              pitch={pitch}
               volume={volume}
               format={format}
               orientation={orientationMode}
               filename={filename}
+              bgm={bgm}
+              onAudioStyle={handleAudioStyle}
               onRate={setRate}
+              onPitch={setPitch}
               onVolume={setVolume}
               onFormat={setFormat}
               onOrientation={handleOrientation}
               onFilename={setFilename}
+              onBgmChange={handleBgmChange}
             />
           </div>
         </div>

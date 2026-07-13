@@ -20,6 +20,12 @@ function formatVolume(volume: number): string {
   return `${offset >= 0 ? '+' : ''}${offset}%`;
 }
 
+/** UI pitch -5…+5 → relative Hz for Edge SSML prosody */
+function formatPitch(pitch: number): string {
+  const hz = Math.round(Math.max(-5, Math.min(5, pitch)) * 5);
+  return `${hz >= 0 ? '+' : ''}${hz}Hz`;
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -43,11 +49,16 @@ function collectStream(
   text: string,
   rateStr: string,
   volStr: string,
+  pitchStr: string,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     try {
-      const { audioStream } = tts.toStream(text, { rate: rateStr, volume: volStr });
+      const { audioStream } = tts.toStream(text, {
+        rate: rateStr,
+        volume: volStr,
+        pitch: pitchStr,
+      });
       audioStream.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
       audioStream.on('end', () => resolve(Buffer.concat(chunks)));
       audioStream.on('error', reject);
@@ -62,6 +73,7 @@ async function synthesizeOnce(
   voiceName: string,
   rateStr: string,
   volStr: string,
+  pitchStr: string,
 ): Promise<Buffer> {
   const tts = new MsEdgeTTS();
   try {
@@ -71,7 +83,7 @@ async function synthesizeOnce(
       'Edge TTS 連線',
     );
     return await withTimeout(
-      collectStream(tts, text, rateStr, volStr),
+      collectStream(tts, text, rateStr, volStr, pitchStr),
       SYNTH_TIMEOUT_MS,
       'Edge TTS 合成',
     );
@@ -90,6 +102,7 @@ async function synthesizeBatchSameVoice(
   voiceName: string,
   rateStr: string,
   volStr: string,
+  pitchStr: string,
 ): Promise<Buffer[]> {
   const tts = new MsEdgeTTS();
   try {
@@ -101,7 +114,7 @@ async function synthesizeBatchSameVoice(
     const out: Buffer[] = [];
     for (let i = 0; i < texts.length; i++) {
       const buf = await withTimeout(
-        collectStream(tts, texts[i], rateStr, volStr),
+        collectStream(tts, texts[i], rateStr, volStr, pitchStr),
         SYNTH_TIMEOUT_MS,
         `Edge TTS 合成 #${i + 1}`,
       );
@@ -122,12 +135,13 @@ async function synthesizeWithRetry(
   voiceName: string,
   rateStr: string,
   volStr: string,
+  pitchStr: string,
 ): Promise<Buffer> {
   try {
-    return await synthesizeOnce(text, voiceName, rateStr, volStr);
+    return await synthesizeOnce(text, voiceName, rateStr, volStr, pitchStr);
   } catch (first) {
     console.warn('[TTS] first attempt failed, retrying once:', first);
-    return await synthesizeOnce(text, voiceName, rateStr, volStr);
+    return await synthesizeOnce(text, voiceName, rateStr, volStr, pitchStr);
   }
 }
 
@@ -154,8 +168,10 @@ export async function POST(req: NextRequest) {
     const payload = await req.json();
     const rate = Math.max(-5, Math.min(5, Number(payload.rate ?? 0)));
     const volume = Math.max(0, Math.min(150, Number(payload.volume ?? 100)));
+    const pitch = Math.max(-5, Math.min(5, Number(payload.pitch ?? 0)));
     const rateStr = formatRate(rate);
     const volStr = formatVolume(volume);
+    const pitchStr = formatPitch(pitch);
 
     // ── Batch mode: { items: [{ text, language, gender }, ...] } ──
     if (Array.isArray(payload.items)) {
@@ -208,10 +224,10 @@ export async function POST(req: NextRequest) {
         console.log(`[TTS batch] voice=${voiceName} count=${g.texts.length}`);
         let buffers: Buffer[];
         try {
-          buffers = await synthesizeBatchSameVoice(g.texts, voiceName, rateStr, volStr);
+          buffers = await synthesizeBatchSameVoice(g.texts, voiceName, rateStr, volStr, pitchStr);
         } catch (first) {
           console.warn('[TTS batch] group failed, retry once:', first);
-          buffers = await synthesizeBatchSameVoice(g.texts, voiceName, rateStr, volStr);
+          buffers = await synthesizeBatchSameVoice(g.texts, voiceName, rateStr, volStr, pitchStr);
         }
         for (let i = 0; i < g.indices.length; i++) {
           const buf = buffers[i];
@@ -254,9 +270,11 @@ export async function POST(req: NextRequest) {
     const voices = VOICE_MAP[language];
     const voiceName = voices[gender] ?? voices.female;
 
-    console.log(`[TTS] ${language} ${gender} ${voiceName} rate=${rateStr} vol=${volStr}`);
+    console.log(
+      `[TTS] ${language} ${gender} ${voiceName} rate=${rateStr} vol=${volStr} pitch=${pitchStr}`,
+    );
 
-    const audioBuffer = await synthesizeWithRetry(text, voiceName, rateStr, volStr);
+    const audioBuffer = await synthesizeWithRetry(text, voiceName, rateStr, volStr, pitchStr);
 
     if (audioBuffer.length < 128) {
       return NextResponse.json(

@@ -9,6 +9,14 @@ import {
 import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
 import type { SubtitleLine } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
+import {
+  applyBgmDuckAutomation,
+  bgmGainFromUi,
+  createBuiltinPulseBgm,
+  scheduleLoopingBgm,
+  type BgmSettings,
+  type DuckSegment,
+} from '@/lib/bgm';
 
 export interface RecordingOptions {
   scriptLines: ScriptLine[];
@@ -18,7 +26,13 @@ export interface RecordingOptions {
   format: 'mp4' | 'webm';
   rate: number;
   volume: number;
+  /** Edge TTS pitch UI scale -5…+5 (default 0) */
+  pitch?: number;
   scriptLanguage: string;
+  /** BGM mode / volume / duck */
+  bgm?: BgmSettings;
+  /** Raw audio for mode=upload (mp3/wav/ogg…) */
+  bgmArrayBuffer?: ArrayBuffer | null;
 }
 
 export interface RecordingResult {
@@ -99,6 +113,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
     const {
       scriptLines, tracks, image, canvas,
       format, rate, volume, scriptLanguage,
+      pitch = 0,
+      bgm,
+      bgmArrayBuffer = null,
     } = opts;
 
     const { mimeType, ext } = chooseMime(format);
@@ -162,6 +179,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       const gainValue = Math.min(0.85, 1 / Math.sqrt(Math.max(tracks.length, 1)));
       const segmentDurations: number[] = new Array(scriptLines.length).fill(0);
+      const speechDurations: number[] = new Array(scriptLines.length).fill(0);
       const allSources: { source: AudioBufferSourceNode; startAt: number }[] = [];
       const trackBuffers: AudioBuffer[][] = [];
 
@@ -178,9 +196,15 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
           gender: resolveGender(scriptLines[i], track),
         }));
 
-        const abs = await fetchTTSBatch(items, rate, volume, (done, total) => {
-          onStatus(`正在生成語音 ${track.label || track.language} ${done}/${total}…`);
-        });
+        const abs = await fetchTTSBatch(
+          items,
+          rate,
+          volume,
+          (done, total) => {
+            onStatus(`正在生成語音 ${track.label || track.language} ${done}/${total}…`);
+          },
+          pitch,
+        );
 
         const buffers: AudioBuffer[] = [];
         for (const ab of abs) {
@@ -192,6 +216,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       for (let i = 0; i < scriptLines.length; i++) {
         const maxDur = Math.max(...trackBuffers.map(bufs => bufs[i].duration), 0.4);
+        speechDurations[i] = maxDur;
         segmentDurations[i] = maxDur + 0.2;
       }
 
@@ -225,6 +250,53 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         1,
         segmentDurations.reduce((a, b) => a + b, 0),
       );
+
+      // ── 2b. Prepare BGM (builtin pulse / user upload) ──────────
+      type BgmPlan = {
+        buffer: AudioBuffer;
+        gain: GainNode;
+        baseGain: number;
+        duck: boolean;
+        duckSegments: DuckSegment[];
+      };
+      let bgmPlan: BgmPlan | null = null;
+
+      const bgmMode = bgm?.mode ?? 'off';
+      if (bgmMode !== 'off') {
+        onStatus('正在準備 BGM…');
+        try {
+          let bgmBuffer: AudioBuffer;
+          if (bgmMode === 'builtin') {
+            bgmBuffer = createBuiltinPulseBgm(audioContext, 4, 128);
+          } else {
+            if (!bgmArrayBuffer || bgmArrayBuffer.byteLength < 64) {
+              throw new Error('請先上傳 BGM 音訊檔');
+            }
+            bgmBuffer = await audioContext.decodeAudioData(bgmArrayBuffer.slice(0));
+          }
+
+          const baseGain = bgmGainFromUi(bgm?.volume ?? 35);
+          const bgmGain = audioContext.createGain();
+          bgmGain.gain.value = baseGain;
+          bgmGain.connect(destination);
+
+          const duckSegments: DuckSegment[] = segmentStarts.map((start, i) => ({
+            start,
+            end: start + speechDurations[i],
+          }));
+
+          bgmPlan = {
+            buffer: bgmBuffer,
+            gain: bgmGain,
+            baseGain,
+            duck: bgm?.duck !== false,
+            duckSegments,
+          };
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          throw new Error(`BGM 無法載入：${msg}`);
+        }
+      }
 
       let cumTime = 0;
       for (let i = 0; i < scriptLines.length; i++) {
@@ -331,6 +403,31 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
                 source.start(audioStartTime + startAt);
               } catch (e) {
                 console.warn('source.start failed', e);
+              }
+            }
+
+            // Loop BGM under TTS for the full video length
+            if (bgmPlan) {
+              try {
+                if (bgmPlan.duck) {
+                  applyBgmDuckAutomation(
+                    bgmPlan.gain,
+                    audioStartTime,
+                    bgmPlan.baseGain,
+                    bgmPlan.duckSegments,
+                  );
+                } else {
+                  bgmPlan.gain.gain.setValueAtTime(bgmPlan.baseGain, audioStartTime);
+                }
+                scheduleLoopingBgm(
+                  ctx,
+                  bgmPlan.buffer,
+                  bgmPlan.gain,
+                  audioStartTime,
+                  totalDuration,
+                );
+              } catch (e) {
+                console.warn('BGM schedule failed', e);
               }
             }
 
