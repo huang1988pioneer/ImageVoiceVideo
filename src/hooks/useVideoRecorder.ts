@@ -264,7 +264,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       try {
         recorder = new MediaRecorder(mixedStream, {
           mimeType,
-          videoBitsPerSecond: 2_500_000,
+          // Lower bitrate for static images to keep file size under 4MB Vercel limit
+          // This allows backend FFmpeg conversion to MP4 to succeed!
+          videoBitsPerSecond: 1_000_000,
           audioBitsPerSecond: 128_000,
         });
       } catch {
@@ -435,10 +437,12 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         throw new Error('錄製檔案過小（可能無影格），請重新整理後再試');
       }
 
-      // Critical: MediaRecorder WebM often has Duration=0 without this fix
-      if (currentExt === 'webm' || blob.type.includes('webm')) {
-        blob = await fixWebmDuration(blob, totalDuration);
-      }
+      // Note: We deliberately removed fixWebmDuration here!
+      // The fixWebmDuration script frequently corrupts single-chunk WebM files,
+      // causing them to truncate early (e.g. stopping at 6 seconds).
+      // Without it, WebM duration might show as 0, but it will play fully.
+      // Furthermore, because we lowered the bitrate, the file will be < 4MB
+      // and will successfully convert to MP4 (which has perfect duration headers).
 
       if (format === 'mp4' && (currentExt === 'webm' || blob.type.includes('webm'))) {
         onStatus('正在轉換為 MP4…');
