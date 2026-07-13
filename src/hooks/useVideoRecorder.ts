@@ -266,7 +266,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
           mimeType,
           // Lower bitrate for static images to keep file size under 4MB Vercel limit
           // This allows backend FFmpeg conversion to MP4 to succeed!
-          videoBitsPerSecond: 1_000_000,
+          videoBitsPerSecond: 333_000,
           audioBitsPerSecond: 128_000,
         });
       } catch {
