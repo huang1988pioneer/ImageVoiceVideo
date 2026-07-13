@@ -394,8 +394,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         };
 
         try {
-          // 1000ms timeslice → one WebM Cluster per second (better seeking / duration)
-          rec.start(1000);
+          // Record in a single chunk to prevent Cluster timestamp corruption.
+          // Using timeslice with canvas capture streams often causes players to stop early.
+          rec.start();
         } catch (e) {
           finish(e instanceof Error ? e : new Error(String(e)));
         }
