@@ -28,28 +28,6 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines;
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.arcTo(x + w, y, x + w, y + radius, radius);
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.arcTo(x + w, y + h, x + w - radius, y + h, radius);
-  ctx.lineTo(x + radius, y + h);
-  ctx.arcTo(x, y + h, x, y + h - radius, radius);
-  ctx.lineTo(x, y + radius);
-  ctx.arcTo(x, y, x + radius, y, radius);
-  ctx.closePath();
-}
-
 export function useCanvasRenderer() {
   const drawFrame = useCallback((
     canvas: HTMLCanvasElement,
@@ -69,24 +47,24 @@ export function useCanvasRenderer() {
     const scale = shortSide / BASE_SHORT;
     const fontSize = Math.round(38 * scale);
     const lineHeight = fontSize * 1.5;
-    const padding = Math.round(24 * scale);
+    const sidePad = Math.round(24 * scale);
     const bottomMargin = Math.round((H > W ? 60 : 48) * scale);
-    const radius = Math.round(12 * scale);
 
     // ── Background ───────────────────────────────────────────────
+    // Contain-fit: always show the complete image (never crop edges).
+    // Letterbox bars only appear when user forces 9:16 / 16:9 that
+    // doesn't match the photo; auto mode matches image aspect instead.
     ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0a0f18';
+    ctx.fillRect(0, 0, W, H);
     if (image && image.naturalWidth > 0) {
-      // Cover-fit — works for portrait, landscape, and square images
-      const imgScale = Math.max(W / image.naturalWidth, H / image.naturalHeight);
+      const imgScale = Math.min(W / image.naturalWidth, H / image.naturalHeight);
       const sw = image.naturalWidth * imgScale;
       const sh = image.naturalHeight * imgScale;
       ctx.drawImage(image, (W - sw) / 2, (H - sh) / 2, sw, sh);
-    } else {
-      ctx.fillStyle = '#111827';
-      ctx.fillRect(0, 0, W, H);
     }
 
-    // ── Active subtitles ─────────────────────────────────────────
+    // ── Active subtitles (text only, no black box) ───────────────
     const active = showAll
       ? subtitleLines
       : subtitleLines.filter(s => elapsed >= s.startAt && elapsed < s.endAt);
@@ -104,30 +82,36 @@ export function useCanvasRenderer() {
     for (const [, subs] of [...groups.entries()].reverse()) {
       const text = subs.map(s => s.text).join(' / ');
       ctx.font = `bold ${fontSize}px ${FONT_FAMILY}`;
-      const maxTextWidth = W - padding * 4;
+      const maxTextWidth = W - sidePad * 2;
       const lines = wrapText(ctx, text, Math.max(40, maxTextWidth));
 
-      const boxH = lines.length * lineHeight + padding * 2;
-      const boxY = trackY - boxH;
+      const blockH = lines.length * lineHeight;
+      const textTop = trackY - blockH;
 
-      ctx.save();
-      ctx.globalAlpha = 0.72;
-      ctx.fillStyle = '#000';
-      roundRect(ctx, padding, boxY, W - padding * 2, boxH, radius);
-      ctx.fill();
-      ctx.restore();
-
-      ctx.fillStyle = '#fff';
+      // White text + stroke/shadow for readability without a dark panel
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = Math.round(6 * scale);
-      lines.forEach((l, i) => {
-        ctx.fillText(l, W / 2, boxY + padding + i * lineHeight);
-      });
-      ctx.shadowBlur = 0;
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.lineWidth = Math.max(2, Math.round(4 * scale));
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = Math.round(8 * scale);
+      ctx.shadowOffsetY = Math.round(1 * scale);
 
-      trackY = boxY - Math.round(12 * scale);
+      lines.forEach((l, i) => {
+        const x = W / 2;
+        const y = textTop + i * lineHeight;
+        ctx.strokeText(l, x, y);
+        ctx.fillText(l, x, y);
+      });
+
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.lineWidth = 1;
+
+      trackY = textTop - Math.round(12 * scale);
     }
   }, []);
 

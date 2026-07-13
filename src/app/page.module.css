@@ -202,7 +202,7 @@
   border: 1px solid rgba(20, 184, 166, 0.28);
 }
 
-/* ── Preview frame — grow to available space ──────────── */
+/* ── Preview frame — full image scaled to fit, never cropped ─ */
 .previewFrame {
   position: relative;
   border-radius: calc(var(--radius-lg) + 2px);
@@ -217,29 +217,40 @@
   overflow: hidden;
 }
 
+/*
+ * Stage box: aspect-ratio + width come from inline style (matches canvas pixels).
+ * Never crop — canvas is contain-fit inside the stage.
+ */
 .previewFrameInner {
+  --preview-max-h: min(56dvh, 640px);
+  position: relative;
+  max-width: 100%;
+  max-height: var(--preview-max-h);
+  height: auto;
+  margin-inline: auto;
   border-radius: var(--radius-md);
   overflow: hidden;
-  position: relative;
-  /* Cap height so generate button + result stay visible below */
-  max-height: min(56dvh, 640px);
-  min-height: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: #0a0f18;
-  width: 100%;
 }
 
-/* Explicit display size — avoid canvas intrinsic 1080×1920 blowing layout */
+.previewFrameInner[data-orientation='landscape'],
+.previewFrameLandscape .previewFrameInner {
+  --preview-max-h: min(42dvh, 420px);
+  max-height: var(--preview-max-h);
+}
+
+/* Scale canvas to fit the stage without cropping (letterbox if needed) */
+.previewCanvas,
 .previewFrameInner :global(.preview-canvas) {
+  position: absolute;
+  inset: 0;
   display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: min(56dvh, 640px);
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
   object-fit: contain;
-  flex-shrink: 1;
+  background: #0a0f18;
 }
 
 .previewNotch {
@@ -255,23 +266,13 @@
   pointer-events: none;
 }
 
-.previewFrameLandscape .previewNotch {
+.previewFrameLandscape .previewNotch,
+.previewFrameInner[data-orientation='landscape'] .previewNotch {
   display: none;
 }
 
 .previewFrameLandscape {
   border-radius: var(--radius-lg);
-}
-
-.previewFrameLandscape .previewFrameInner {
-  max-height: min(42dvh, 420px);
-  min-height: 140px;
-}
-
-.previewFrameLandscape .previewFrameInner :global(.preview-canvas) {
-  max-height: min(42dvh, 420px);
-  width: 100%;
-  height: auto;
 }
 
 .previewMeta {
@@ -303,9 +304,14 @@
   gap: 10px;
   flex: 0 0 auto;
   position: relative;
-  z-index: 1;
-  /* Opaque enough so nothing bleeds through from above */
-  background: transparent;
+  z-index: 2;
+  background: rgba(7, 11, 20, 0.88);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 /* Result sits below actions as its own block */
@@ -313,28 +319,18 @@
   flex: 0 0 auto;
   min-width: 0;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
-/* When a result exists, shrink live preview so result becomes the focus */
+/* With result: keep a smaller but still complete preview (same aspect ratio) */
 .rightPanelHasResult .previewFrameInner {
-  max-height: min(28dvh, 280px);
-  min-height: 120px;
+  --preview-max-h: min(32dvh, 320px);
 }
 
-.rightPanelHasResult .previewFrameInner :global(.preview-canvas) {
-  max-height: min(28dvh, 280px);
-}
-
+.rightPanelHasResult .previewFrameInner[data-orientation='landscape'],
 .rightPanelHasResult.rightPanelLandscape .previewFrameInner,
 .rightPanelHasResult .previewFrameLandscape .previewFrameInner {
-  max-height: min(22dvh, 200px);
-  min-height: 100px;
-}
-
-.rightPanelHasResult.rightPanelLandscape .previewFrameInner :global(.preview-canvas),
-.rightPanelHasResult .previewFrameLandscape .previewFrameInner :global(.preview-canvas) {
-  max-height: min(22dvh, 200px);
+  --preview-max-h: min(24dvh, 220px);
 }
 
 .rightPanelHasResult .previewNotch {
@@ -376,11 +372,21 @@
   }
 
   .previewFrameInner {
-    max-height: min(68dvh, 680px);
+    --preview-max-h: min(50dvh, 560px);
   }
 
-  .previewFrameInner :global(.preview-canvas) {
-    max-height: min(68dvh, 680px);
+  .previewFrameInner[data-orientation='landscape'],
+  .previewFrameLandscape .previewFrameInner {
+    --preview-max-h: min(38dvh, 380px);
+  }
+
+  .rightPanelHasResult .previewFrameInner {
+    --preview-max-h: min(28dvh, 260px);
+  }
+
+  .rightPanelHasResult .previewFrameInner[data-orientation='landscape'],
+  .rightPanelHasResult .previewFrameLandscape .previewFrameInner {
+    --preview-max-h: min(20dvh, 180px);
   }
 
   .logoSub {
@@ -393,7 +399,7 @@
   }
 }
 
-/* Mid tablet: stack form above? Keep side-by-side with equal-ish but preview bigger */
+/* Mid tablet: keep side-by-side, form column slightly narrower */
 @media (max-width: 900px) and (min-width: 700px) {
   .layout {
     grid-template-columns: minmax(240px, 38%) minmax(0, 1fr);
@@ -457,10 +463,6 @@
     gap: 10px;
   }
 
-  .rightPanelLandscape {
-    /* same flow */
-  }
-
   .previewCard {
     width: 100%;
   }
@@ -470,16 +472,21 @@
   }
 
   .previewFrameInner {
-    max-height: min(52dvh, 420px);
+    --preview-max-h: min(46dvh, 380px);
   }
 
-  .previewFrameInner :global(.preview-canvas) {
-    max-height: min(52dvh, 420px);
+  .previewFrameInner[data-orientation='landscape'],
+  .previewFrameLandscape .previewFrameInner {
+    --preview-max-h: min(28dvh, 200px);
   }
 
-  .previewFrameLandscape .previewFrameInner,
-  .previewFrameLandscape .previewFrameInner :global(.preview-canvas) {
-    max-height: min(32dvh, 240px);
+  .rightPanelHasResult .previewFrameInner {
+    --preview-max-h: min(26dvh, 220px);
+  }
+
+  .rightPanelHasResult .previewFrameInner[data-orientation='landscape'],
+  .rightPanelHasResult .previewFrameLandscape .previewFrameInner {
+    --preview-max-h: min(18dvh, 140px);
   }
 
   .previewNotch {
@@ -490,7 +497,8 @@
     display: none;
   }
 
-  .actionStack {
+  .actionStack,
+  .resultSlot {
     width: 100%;
   }
 

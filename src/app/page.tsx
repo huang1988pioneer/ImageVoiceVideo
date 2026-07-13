@@ -295,15 +295,24 @@ export default function Home() {
                 canvasSize.orientation === 'landscape' ? styles.previewFrameLandscape : ''
               }`}
             >
-              <div className={styles.previewFrameInner}>
-                {canvasSize.orientation === 'portrait' && (
+              <div
+                className={styles.previewFrameInner}
+                data-orientation={canvasSize.orientation}
+                style={{
+                  // Match export canvas aspect so CSS never crops the preview
+                  aspectRatio: `${canvasSize.width} / ${canvasSize.height}`,
+                  width: `min(100%, calc(var(--preview-max-h) * ${canvasSize.width} / ${canvasSize.height}))`,
+                }}
+              >
+                {canvasSize.orientation === 'portrait' &&
+                  canvasSize.height / canvasSize.width > 1.4 && (
                   <div className={styles.previewNotch} aria-hidden />
                 )}
                 <canvas
                   ref={canvasRef}
                   width={canvasSize.width}
                   height={canvasSize.height}
-                  className="preview-canvas"
+                  className={`preview-canvas ${styles.previewCanvas}`}
                   data-orientation={canvasSize.orientation}
                 />
               </div>
