@@ -145,7 +145,7 @@ export default function Home() {
     setBgm({ ...preset.bgm });
     setStatus(
       style === 'hype'
-        ? '已選「預設嗨歌」：快語速 + 抬音高 + 內建節拍 BGM'
+        ? '已選「預設嗨歌」：依歌詞隨機生成 BGM，並對拍嗨唱'
         : '已選「純語音」：正常旁白、無 BGM',
     );
   }, []);
@@ -181,6 +181,7 @@ export default function Home() {
       audioStyle === 'hype'
         ? { ...bgm, mode: 'builtin' }
         : { ...bgm, mode: 'off' };
+    const singToBgm = audioStyle === 'hype';
 
     try {
       const result = await record({
@@ -195,6 +196,7 @@ export default function Home() {
         scriptLanguage: scriptLang,
         bgm: effectiveBgm,
         bgmArrayBuffer: null,
+        singToBgm,
       });
       const url = URL.createObjectURL(result.blob);
       resultUrlRef.current = url;
@@ -400,6 +402,7 @@ export default function Home() {
                 firstLine={firstLine}
                 customFilename={filename}
                 orientation={canvasSize.orientation}
+                audioStyle={audioStyle}
                 onClear={() => {
                   if (resultUrlRef.current) {
                     URL.revokeObjectURL(resultUrlRef.current);

@@ -10,12 +10,16 @@ import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
 import type { SubtitleLine } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
 import {
+  analyzeLyricsForMusic,
   applyBgmDuckAutomation,
   bgmGainFromUi,
-  createBuiltinPulseBgm,
+  buildBeatSyncedTimeline,
+  createLyricSeededBgm,
+  lineMelodyDetuneCents,
   scheduleLoopingBgm,
   type BgmSettings,
   type DuckSegment,
+  type LyricMusicProfile,
 } from '@/lib/bgm';
 
 export interface RecordingOptions {
@@ -33,6 +37,11 @@ export interface RecordingOptions {
   bgm?: BgmSettings;
   /** Raw audio for mode=upload (mp3/wav/ogg…) */
   bgmArrayBuffer?: ArrayBuffer | null;
+  /**
+   * Align vocals to beat grid + apply melodic detune (hype “singing”).
+   * Requires builtin lyric-seeded BGM for best effect.
+   */
+  singToBgm?: boolean;
 }
 
 export interface RecordingResult {
@@ -116,6 +125,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       pitch = 0,
       bgm,
       bgmArrayBuffer = null,
+      singToBgm = false,
     } = opts;
 
     const { mimeType, ext } = chooseMime(format);
@@ -220,15 +230,64 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         segmentDurations[i] = maxDur + 0.2;
       }
 
-      const segmentStarts = segmentDurations.reduce<number[]>((starts, _dur, idx) => {
-        starts.push(idx === 0 ? 0 : starts[idx - 1] + segmentDurations[idx - 1]);
-        return starts;
-      }, []);
+      // ── 2b. Lyric-seeded BGM + optional beat-sync “singing” ─────
+      type BgmPlan = {
+        buffer: AudioBuffer;
+        gain: GainNode;
+        baseGain: number;
+        duck: boolean;
+        duckSegments: DuckSegment[];
+        profile: LyricMusicProfile | null;
+      };
+      let bgmPlan: BgmPlan | null = null;
+      let musicProfile: LyricMusicProfile | null = null;
+
+      const bgmMode = bgm?.mode ?? 'off';
+      const lyricTexts = scriptLines.map(l => l.text);
+
+      if (bgmMode === 'builtin' || singToBgm) {
+        musicProfile = analyzeLyricsForMusic(lyricTexts);
+      }
+
+      // Beat-align vocals when singing to BGM
+      let segmentStarts: number[];
+      let totalDuration: number;
+
+      if (singToBgm && musicProfile) {
+        const timeline = buildBeatSyncedTimeline(speechDurations, musicProfile.bpm);
+        for (let i = 0; i < scriptLines.length; i++) {
+          segmentDurations[i] = timeline.segmentDurations[i];
+          speechDurations[i] = timeline.speechDurations[i];
+        }
+        segmentStarts = timeline.segmentStarts;
+        totalDuration = timeline.totalDuration;
+        onStatus(
+          `嗨歌對拍：${musicProfile.styleName} · ${musicProfile.bpm} BPM · 共 ${scriptLines.length} 句`,
+        );
+      } else {
+        segmentStarts = segmentDurations.reduce<number[]>((starts, _dur, idx) => {
+          starts.push(idx === 0 ? 0 : starts[idx - 1] + segmentDurations[idx - 1]);
+          return starts;
+        }, []);
+        totalDuration = Math.max(
+          1,
+          segmentDurations.reduce((a, b) => a + b, 0),
+        );
+      }
 
       trackBuffers.forEach((buffers, trackIndex) => {
         buffers.forEach((buffer, lineIndex) => {
           const source = audioContext!.createBufferSource();
           source.buffer = buffer;
+
+          // Melodic contour for hype “singing” (Web Audio detune in cents)
+          if (singToBgm && musicProfile && typeof source.detune?.setValueAtTime === 'function') {
+            try {
+              source.detune.value = lineMelodyDetuneCents(lineIndex, musicProfile);
+            } catch {
+              /* ignore unsupported detune */
+            }
+          }
 
           const gain = audioContext!.createGain();
           gain.gain.value = gainValue;
@@ -246,28 +305,21 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         });
       });
 
-      const totalDuration = Math.max(
-        1,
-        segmentDurations.reduce((a, b) => a + b, 0),
-      );
-
-      // ── 2b. Prepare BGM (builtin pulse / user upload) ──────────
-      type BgmPlan = {
-        buffer: AudioBuffer;
-        gain: GainNode;
-        baseGain: number;
-        duck: boolean;
-        duckSegments: DuckSegment[];
-      };
-      let bgmPlan: BgmPlan | null = null;
-
-      const bgmMode = bgm?.mode ?? 'off';
       if (bgmMode !== 'off') {
-        onStatus('正在準備 BGM…');
+        onStatus(
+          musicProfile
+            ? `正在依歌詞生成 BGM（${musicProfile.styleName} · ${musicProfile.bpm} BPM）…`
+            : '正在準備 BGM…',
+        );
         try {
           let bgmBuffer: AudioBuffer;
           if (bgmMode === 'builtin') {
-            bgmBuffer = createBuiltinPulseBgm(audioContext, 4, 128);
+            if (!musicProfile) {
+              musicProfile = analyzeLyricsForMusic(lyricTexts);
+            }
+            // Loop length: 8 beats ≈ 2 bars, scales with BPM
+            const loopSec = Math.max(4, (60 / musicProfile.bpm) * 8);
+            bgmBuffer = createLyricSeededBgm(audioContext, musicProfile, loopSec);
           } else {
             if (!bgmArrayBuffer || bgmArrayBuffer.byteLength < 64) {
               throw new Error('請先上傳 BGM 音訊檔');
@@ -291,6 +343,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             baseGain,
             duck: bgm?.duck !== false,
             duckSegments,
+            profile: musicProfile,
           };
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -298,13 +351,11 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         }
       }
 
-      let cumTime = 0;
       for (let i = 0; i < scriptLines.length; i++) {
         for (const trackSubs of allSubtitleTracks) {
-          trackSubs[i].startAt = cumTime;
-          trackSubs[i].endAt = cumTime + segmentDurations[i];
+          trackSubs[i].startAt = segmentStarts[i];
+          trackSubs[i].endAt = segmentStarts[i] + segmentDurations[i];
         }
-        cumTime += segmentDurations[i];
       }
       const flatSubtitles = allSubtitleTracks.flat();
 

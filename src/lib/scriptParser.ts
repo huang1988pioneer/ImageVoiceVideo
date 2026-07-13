@@ -46,3 +46,13 @@ export function parseScriptLines(raw: string): ScriptLine[] {
 export function safeFilename(raw: string, fallback = '影片'): string {
   return raw.replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 60) || fallback;
 }
+
+/** Append 嗨歌 tag for default hype song exports (idempotent). */
+export function withHypeFilenameTag(raw: string, fallback = '影片'): string {
+  const tag = '_嗨歌';
+  const base = raw.trim() || fallback;
+  if (base.includes('嗨歌')) return base;
+  // Keep total under safeFilename's 60-char cap so the tag is not truncated
+  const maxBase = Math.max(1, 60 - tag.length);
+  return `${base.slice(0, maxBase)}${tag}`;
+}

@@ -45,7 +45,7 @@ const STYLE_OPTIONS: {
     value: 'hype',
     label: '預設嗨歌',
     icon: '♪',
-    hint: `語速 +${HYPE_PRESET.rate} · 音高 +${HYPE_PRESET.pitch} · 節拍 BGM`,
+    hint: '歌詞生成 BGM · 對拍嗨唱',
   },
 ];
 
@@ -102,7 +102,7 @@ export default function AudioSettings({
         </div>
         <p className={styles.presetHint}>
           {isHype
-            ? '嗨歌感：快語速旁白 + 內建節拍（非真唱）。可微調下方參數。'
+            ? '依歌詞隨機生成背景音樂，語音對拍並帶旋律音高變化（Edge TTS 嗨唱感，非專業翻唱）。每次生成曲風／BPM 會不同。'
             : `純語音：${VOICE_PRESET.volume}% 音量、無背景音樂。可微調語速／音高。`}
         </p>
       </div>
@@ -236,17 +236,22 @@ export default function AudioSettings({
       <div className={styles.filenameRow}>
         <label className={styles.label} htmlFor="filename-input">
           輸出檔名
+          {isHype && <span className={styles.val}> · 會標註嗨歌</span>}
         </label>
         <div className={styles.filenameInput}>
           <input
             id="filename-input"
             type="text"
-            placeholder="預設使用第一行文字"
+            placeholder={
+              isHype ? '預設：第一行_嗨歌' : '預設使用第一行文字'
+            }
             value={filename}
             onChange={e => onFilename(e.target.value)}
             className={styles.input}
           />
-          <span className={styles.ext}>.{format}</span>
+          <span className={styles.ext}>
+            {isHype && !filename.includes('嗨歌') ? '_嗨歌' : ''}.{format}
+          </span>
         </div>
       </div>
     </div>
