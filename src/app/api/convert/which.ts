@@ -34,6 +34,17 @@ export async function which(cmd: string): Promise<string | null> {
  * 2. System PATH
  */
 export async function resolveFfmpeg(): Promise<string | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ffmpeg = require('@ffmpeg-installer/ffmpeg');
+    if (ffmpeg.path) {
+      console.log(`[FFmpeg] using @ffmpeg-installer: ${ffmpeg.path}`);
+      return ffmpeg.path;
+    }
+  } catch {
+    /* ignore */
+  }
+
   // Static relative path under cwd — turbopackIgnore keeps NFT from tracing the whole repo
   const cwd = /* turbopackIgnore: true */ process.cwd();
   const candidates =

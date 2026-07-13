@@ -76,8 +76,8 @@ function requestCanvasFrame(stream: MediaStream) {
  * Reusing a previous track often yields 0-duration / empty WebM in Chrome.
  */
 function createCanvasStream(canvas: HTMLCanvasElement): MediaStream {
-  // frameRate 30 keeps the track clock advancing even if requestFrame is missing
-  return canvas.captureStream(30);
+  // Lower framerate to 15 to allow higher bits per frame within the same bitrate budget
+  return canvas.captureStream(15);
 }
 
 export function useVideoRecorder(onStatus: (msg: string) => void) {
@@ -264,9 +264,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       try {
         recorder = new MediaRecorder(mixedStream, {
           mimeType,
-          // Lower bitrate for static images to keep file size under 4MB Vercel limit
-          // This allows backend FFmpeg conversion to MP4 to succeed!
-          videoBitsPerSecond: 333_000,
+          // Bitrate set to 1.2 Mbps to preserve image quality
+          // while keeping file size under 4MB Vercel limit for typical short videos (<25s).
+          videoBitsPerSecond: 1_200_000,
           audioBitsPerSecond: 128_000,
         });
       } catch {
@@ -336,7 +336,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             const workerCode = `
               let timer;
               self.onmessage = e => {
-                if (e.data === 'start') timer = setInterval(() => self.postMessage('tick'), 33);
+                if (e.data === 'start') timer = setInterval(() => self.postMessage('tick'), 66);
                 if (e.data === 'stop')  { clearInterval(timer); self.close(); }
               };
             `;
@@ -358,7 +358,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
                 Math.max(wallElapsed, audioElapsed, 0),
               );
               const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
-              onStatus(`正在錄製影片 ${pct}%…`);
+              onStatus(`正在錄製影片 ${pct}% (請勿切換分頁或關閉螢幕，否則會中斷)…`);
               drawFrame(canvas, image, flatSubtitles, elapsed);
               requestCanvasFrame(streamForFrames);
             };
