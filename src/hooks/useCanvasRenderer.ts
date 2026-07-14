@@ -61,7 +61,7 @@ export function useCanvasRenderer() {
     // Scale UI elements so subtitles look right on both 16:9 and 9:16
     const shortSide = Math.min(W, H);
     const scale = shortSide / BASE_SHORT;
-    const fontSize = Math.round(38 * scale);
+    const fontSize = Math.round(76 * scale); // 2× base (was 38)
     const lineHeight = fontSize * 1.5;
     const sidePad = Math.round(24 * scale);
     const bottomMargin = Math.round((H > W ? 60 : 48) * scale);
@@ -123,11 +123,11 @@ export function useCanvasRenderer() {
       ctx.textBaseline = 'top';
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
-      ctx.lineWidth = Math.max(2, Math.round(4 * scale));
+      ctx.lineWidth = Math.max(3, Math.round(8 * scale));
       ctx.strokeStyle = 'rgba(0,0,0,0.75)';
       ctx.fillStyle = '#fff';
       ctx.shadowColor = 'rgba(0,0,0,0.55)';
-      ctx.shadowBlur = Math.round(8 * scale);
+      ctx.shadowBlur = Math.round(12 * scale);
       ctx.shadowOffsetY = Math.round(1 * scale);
 
       lines.forEach((l, i) => {
