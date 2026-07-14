@@ -227,19 +227,30 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         trackBuffers.push(buffers);
       }
 
+      // Gap between lines (not after the final line).
+      const LINE_GAP_SEC = 0.25;
+      // Intro / outro hold: ≥1s image with no speech (user-facing requirement).
+      // Also gives MediaRecorder room — Chrome often clips WebAudio head/tail.
+      const HEAD_PAD_SEC = 1.0;
+      const END_PAD_SEC = 1.0;
+
       for (let i = 0; i < scriptLines.length; i++) {
-        const maxDur = Math.max(...trackBuffers.map(bufs => bufs[i].duration), 0.4);
-        segmentDurations[i] = maxDur + 0.2;
+        // Small safety margin: MP3 decode duration can under-report a few ms.
+        const maxDur = Math.max(
+          ...trackBuffers.map(bufs => bufs[i].duration * 1.02 + 0.05),
+          0.4,
+        );
+        const isLast = i === scriptLines.length - 1;
+        segmentDurations[i] = maxDur + (isLast ? 0 : LINE_GAP_SEC);
       }
 
+      // Speech timeline starts after the intro hold.
       const segmentStarts = segmentDurations.reduce<number[]>((starts, _dur, idx) => {
-        starts.push(idx === 0 ? 0 : starts[idx - 1] + segmentDurations[idx - 1]);
+        starts.push(
+          idx === 0 ? HEAD_PAD_SEC : starts[idx - 1] + segmentDurations[idx - 1],
+        );
         return starts;
       }, []);
-      const totalDuration = Math.max(
-        1,
-        segmentDurations.reduce((a, b) => a + b, 0),
-      );
 
       trackBuffers.forEach((buffers, trackIndex) => {
         buffers.forEach((buffer, lineIndex) => {
@@ -262,8 +273,42 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         });
       });
 
+      // When the real last sample of speech finishes (true buffer lengths).
+      let actualSpeechEnd = HEAD_PAD_SEC;
+      trackBuffers.forEach(buffers => {
+        buffers.forEach((buffer, lineIndex) => {
+          actualSpeechEnd = Math.max(
+            actualSpeechEnd,
+            segmentStarts[lineIndex] + buffer.duration,
+          );
+        });
+      });
+      actualSpeechEnd = Math.max(actualSpeechEnd, HEAD_PAD_SEC + 1);
+
+      // Full timeline: intro hold + speech + outro hold.
+      const totalDuration = actualSpeechEnd + END_PAD_SEC;
+
+      // Near-silent bed from t=0 through the end so MediaStream audio never
+      // goes idle (encoders otherwise drop head/tail packets).
+      {
+        const bedLen = totalDuration + 0.1;
+        const bedSamples = Math.max(1, Math.ceil(bedLen * audioContext.sampleRate));
+        const bedBuffer = audioContext.createBuffer(1, bedSamples, audioContext.sampleRate);
+        const ch = bedBuffer.getChannelData(0);
+        for (let s = 0; s < ch.length; s++) {
+          ch[s] = (Math.random() * 2 - 1) * 0.0001;
+        }
+        const bedSource = audioContext.createBufferSource();
+        bedSource.buffer = bedBuffer;
+        const bedGain = audioContext.createGain();
+        bedGain.gain.value = 1;
+        bedSource.connect(bedGain).connect(destination);
+        allSources.push({ source: bedSource, startAt: 0 });
+      }
+
       for (let i = 0; i < scriptLines.length; i++) {
         for (const trackSubs of allSubtitleTracks) {
+          // Subtitles follow speech (after intro); not shown during head/tail holds
           trackSubs[i].startAt = segmentStarts[i];
           trackSubs[i].endAt = segmentStarts[i] + segmentDurations[i];
         }
@@ -388,24 +433,12 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             // even if AudioContext is throttled slightly.
             const recordWallStart = performance.now();
             const activeVisual = visual;
+            let stopping = false;
 
-            resources.worker.onmessage = () => {
-              const wallElapsed = (performance.now() - recordWallStart) / 1000;
-              const audioElapsed = ctx.currentTime - audioStartTime;
-              // Use the larger of the two so we never under-draw near the end
-              const elapsed = Math.min(
-                totalDuration,
-                Math.max(wallElapsed, audioElapsed, 0),
-              );
-              const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
-              onStatus(`正在錄製影片 ${pct}% (請勿切換分頁或關閉螢幕，否則會中斷)…`);
-
-              drawFrame(canvas, activeVisual, flatSubtitles, elapsed);
-              requestCanvasFrame(streamForFrames);
-            };
-            resources.worker.postMessage('start');
-
-            setTimeout(() => {
+            /** Stop only after AudioContext has actually reached totalDuration. */
+            const beginStop = () => {
+              if (stopping || settled) return;
+              stopping = true;
               try {
                 resources.worker?.postMessage('stop');
               } catch {
@@ -413,6 +446,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               }
               drawFrame(canvas, activeVisual, flatSubtitles, Math.max(0, totalDuration - 0.01));
               requestCanvasFrame(streamForFrames);
+              // Extra flush window so the last audio cluster is written out
               setTimeout(() => {
                 try {
                   if (rec.state === 'recording' || rec.state === 'paused') {
@@ -428,9 +462,35 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
                 } catch (e) {
                   finish(e instanceof Error ? e : new Error(String(e)));
                 }
-              }, 150);
-              // 1000ms timeslice needs a little extra tail so the last cluster flushes
-            }, totalDuration * 1000 + 500);
+              }, 400);
+            };
+
+            resources.worker.onmessage = () => {
+              const wallElapsed = (performance.now() - recordWallStart) / 1000;
+              const audioElapsed = ctx.currentTime - audioStartTime;
+              // Use the larger of the two so we never under-draw near the end
+              const elapsed = Math.min(
+                totalDuration,
+                Math.max(wallElapsed, audioElapsed, 0),
+              );
+              const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
+              onStatus(`正在錄製影片 ${pct}% (請勿切換分頁或關閉螢幕，否則會中斷)…`);
+
+              drawFrame(canvas, activeVisual, flatSubtitles, elapsed);
+              requestCanvasFrame(streamForFrames);
+
+              // Drive stop from AudioContext clock (true speech+pad progress).
+              // Wall-clock alone can fire early if AudioContext lags under load.
+              if (audioElapsed >= totalDuration) {
+                beginStop();
+              }
+            };
+            resources.worker.postMessage('start');
+
+            // Fallback if worker ticks stall: wall clock + generous slack
+            setTimeout(() => {
+              beginStop();
+            }, totalDuration * 1000 + 2500);
           }).catch(err => {
             finish(err instanceof Error ? err : new Error(String(err)));
           });
