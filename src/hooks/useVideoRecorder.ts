@@ -12,7 +12,7 @@ import {
   mediaRecorderBitrateOptions,
 } from '@/lib/videoQuality';
 import type { ScriptLine, Track, Gender } from '@/lib/scriptParser';
-import type { SubtitleLine } from './useCanvasRenderer';
+import type { SubtitleLine, SubtitleScale } from './useCanvasRenderer';
 import { useCanvasRenderer } from './useCanvasRenderer';
 
 export interface RecordingOptions {
@@ -26,6 +26,8 @@ export interface RecordingOptions {
   /** Edge TTS pitch UI scale -5…+5 (default 0) */
   pitch?: number;
   scriptLanguage: string;
+  /** Subtitle size: 1 = default, 1.5, 2 */
+  subtitleScale?: SubtitleScale;
 }
 
 export interface RecordingResult {
@@ -131,6 +133,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
       scriptLines, tracks, image, canvas,
       format, rate, volume, scriptLanguage,
       pitch = 0,
+      subtitleScale = 1,
     } = opts;
 
     const { mimeType, ext } = chooseMime(format);
@@ -372,12 +375,12 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         await audioContext.resume();
       }
 
-      drawFrame(canvas, visual, flatSubtitles, 0);
+      drawFrame(canvas, visual, flatSubtitles, 0, false, subtitleScale);
 
       canvasStream = createCanvasStream(canvas);
       // Paint + push a few frames so the first cluster isn't empty
       for (let i = 0; i < 3; i++) {
-        drawFrame(canvas, visual, flatSubtitles, 0);
+        drawFrame(canvas, visual, flatSubtitles, 0, false, subtitleScale);
         requestCanvasFrame(canvasStream);
         await sleep(20);
       }
@@ -494,7 +497,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               } catch {
                 /* ignore */
               }
-              drawFrame(canvas, activeVisual, flatSubtitles, Math.max(0, totalDuration - 0.01));
+              drawFrame(canvas, activeVisual, flatSubtitles, Math.max(0, totalDuration - 0.01), false, subtitleScale);
               requestCanvasFrame(streamForFrames);
               // Extra flush so the last audio cluster (incl. end silence) is written
               setTimeout(() => {
@@ -526,7 +529,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100));
               onStatus(`正在錄製影片 ${pct}% (請勿切換分頁或關閉螢幕，否則會中斷)…`);
 
-              drawFrame(canvas, activeVisual, flatSubtitles, elapsed);
+              drawFrame(canvas, activeVisual, flatSubtitles, elapsed, false, subtitleScale);
               requestCanvasFrame(streamForFrames);
 
               // Require both clocks past totalDuration so we never stop while

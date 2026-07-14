@@ -1,6 +1,7 @@
 'use client';
 import styles from './AudioSettings.module.css';
 import type { OrientationMode } from '@/lib/videoSize';
+import type { SubtitleScale } from '@/hooks/useCanvasRenderer';
 
 interface Props {
   rate: number;
@@ -8,12 +9,14 @@ interface Props {
   volume: number;
   format: 'mp4' | 'webm';
   orientation: OrientationMode;
+  subtitleScale: SubtitleScale;
   filename: string;
   onRate: (v: number) => void;
   onPitch: (v: number) => void;
   onVolume: (v: number) => void;
   onFormat: (v: 'mp4' | 'webm') => void;
   onOrientation: (v: OrientationMode) => void;
+  onSubtitleScale: (v: SubtitleScale) => void;
   onFilename: (v: string) => void;
 }
 
@@ -23,18 +26,26 @@ const ORIENT_OPTIONS: { value: OrientationMode; label: string; hint: string }[] 
   { value: 'landscape', label: '橫式', hint: '16:9' },
 ];
 
+const SUBTITLE_SCALE_OPTIONS: { value: SubtitleScale; label: string }[] = [
+  { value: 1, label: '預設' },
+  { value: 1.5, label: '1.5 倍' },
+  { value: 2, label: '2 倍' },
+];
+
 export default function AudioSettings({
   rate,
   pitch,
   volume,
   format,
   orientation,
+  subtitleScale,
   filename,
   onRate,
   onPitch,
   onVolume,
   onFormat,
   onOrientation,
+  onSubtitleScale,
   onFilename,
 }: Props) {
   return (
@@ -108,6 +119,23 @@ export default function AudioSettings({
                 {o.label}
                 <small className={styles.orientHint}>{o.hint}</small>
               </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.row}>
+        <span className={styles.label}>字幕大小</span>
+        <div className={styles.formatGroup} role="group" aria-label="字幕大小">
+          {SUBTITLE_SCALE_OPTIONS.map(o => (
+            <button
+              key={o.value}
+              type="button"
+              id={`subtitle-scale-${o.value}`}
+              className={`${styles.formatBtn} ${subtitleScale === o.value ? styles.active : ''}`}
+              onClick={() => onSubtitleScale(o.value)}
+            >
+              {o.label}
             </button>
           ))}
         </div>

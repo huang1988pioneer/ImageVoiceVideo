@@ -44,6 +44,12 @@ function visualSize(visual: VisualSource): { w: number; h: number } | null {
   return null;
 }
 
+/** Subtitle size multiplier relative to the default base size (1 / 1.5 / 2) */
+export type SubtitleScale = 1 | 1.5 | 2;
+
+/** Base font size at portrait short side (1080px) — default is half of the former 2× size */
+const BASE_FONT = 38;
+
 export function useCanvasRenderer() {
   const drawFrame = useCallback((
     canvas: HTMLCanvasElement,
@@ -51,6 +57,7 @@ export function useCanvasRenderer() {
     subtitleLines: SubtitleLine[],
     elapsed: number,
     showAll = false,
+    subtitleScale: SubtitleScale = 1,
   ) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -61,7 +68,7 @@ export function useCanvasRenderer() {
     // Scale UI elements so subtitles look right on both 16:9 and 9:16
     const shortSide = Math.min(W, H);
     const scale = shortSide / BASE_SHORT;
-    const fontSize = Math.round(76 * scale); // 2× base (was 38)
+    const fontSize = Math.round(BASE_FONT * subtitleScale * scale);
     const lineHeight = fontSize * 1.5;
     const sidePad = Math.round(24 * scale);
     const bottomMargin = Math.round((H > W ? 60 : 48) * scale);
@@ -123,11 +130,11 @@ export function useCanvasRenderer() {
       ctx.textBaseline = 'top';
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
-      ctx.lineWidth = Math.max(3, Math.round(8 * scale));
+      ctx.lineWidth = Math.max(2, Math.round(4 * subtitleScale * scale));
       ctx.strokeStyle = 'rgba(0,0,0,0.75)';
       ctx.fillStyle = '#fff';
       ctx.shadowColor = 'rgba(0,0,0,0.55)';
-      ctx.shadowBlur = Math.round(12 * scale);
+      ctx.shadowBlur = Math.round(6 * subtitleScale * scale);
       ctx.shadowOffsetY = Math.round(1 * scale);
 
       lines.forEach((l, i) => {

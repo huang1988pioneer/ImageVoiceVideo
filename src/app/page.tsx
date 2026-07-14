@@ -8,6 +8,7 @@ import VideoResult from '@/components/VideoResult';
 import { useCache } from '@/hooks/useCache';
 import { useVideoRecorder } from '@/hooks/useVideoRecorder';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
+import type { SubtitleScale } from '@/hooks/useCanvasRenderer';
 import { parseScriptLines } from '@/lib/scriptParser';
 import type { Track } from '@/lib/scriptParser';
 import {
@@ -18,6 +19,14 @@ import {
 import styles from './page.module.css';
 
 const ORIENT_STORAGE_KEY = 'ivv-orientation-mode';
+const SUBTITLE_SCALE_STORAGE_KEY = 'ivv-subtitle-scale';
+
+function parseSubtitleScale(raw: string | null): SubtitleScale | null {
+  if (raw === '1' || raw === '1.5' || raw === '2') {
+    return Number(raw) as SubtitleScale;
+  }
+  return null;
+}
 
 export default function Home() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -32,6 +41,7 @@ export default function Home() {
   const [volume, setVolume] = useState(100);
   const [format, setFormat] = useState<'mp4' | 'webm'>('mp4');
   const [orientationMode, setOrientationMode] = useState<OrientationMode>('auto');
+  const [subtitleScale, setSubtitleScale] = useState<SubtitleScale>(1);
   const [filename, setFilename] = useState('');
   const [status, setStatus] = useState('就緒 — 上傳圖片並輸入語音稿');
   const [recording, setRecording] = useState(false);
@@ -49,13 +59,15 @@ export default function Home() {
     [orientationMode, imageEl],
   );
 
-  // Restore cache + orientation preference
+  // Restore cache + orientation / subtitle size preference
   useEffect(() => {
     try {
       const saved = localStorage.getItem(ORIENT_STORAGE_KEY) as OrientationMode | null;
       if (saved === 'auto' || saved === 'portrait' || saved === 'landscape') {
         setOrientationMode(saved);
       }
+      const scale = parseSubtitleScale(localStorage.getItem(SUBTITLE_SCALE_STORAGE_KEY));
+      if (scale !== null) setSubtitleScale(scale);
     } catch {
       /* ignore */
     }
@@ -88,8 +100,8 @@ export default function Home() {
       endAt: i + 1,
       language: scriptLang,
     }));
-    drawFrame(canvas, imageEl, subs, 0, true);
-  }, [imageEl, script, scriptLang, drawFrame, canvasSize]);
+    drawFrame(canvas, imageEl, subs, 0, true, subtitleScale);
+  }, [imageEl, script, scriptLang, drawFrame, canvasSize, subtitleScale]);
 
   const handleImage = useCallback(
     (blob: Blob, url: string) => {
@@ -117,6 +129,15 @@ export default function Home() {
     setOrientationMode(mode);
     try {
       localStorage.setItem(ORIENT_STORAGE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleSubtitleScale = useCallback((scale: SubtitleScale) => {
+    setSubtitleScale(scale);
+    try {
+      localStorage.setItem(SUBTITLE_SCALE_STORAGE_KEY, String(scale));
     } catch {
       /* ignore */
     }
@@ -159,6 +180,7 @@ export default function Home() {
         volume,
         pitch,
         scriptLanguage: scriptLang,
+        subtitleScale,
       });
       const url = URL.createObjectURL(result.blob);
       resultUrlRef.current = url;
@@ -184,6 +206,7 @@ export default function Home() {
     volume,
     pitch,
     scriptLang,
+    subtitleScale,
     record,
     canvasSize,
   ]);
@@ -267,12 +290,14 @@ export default function Home() {
               volume={volume}
               format={format}
               orientation={orientationMode}
+              subtitleScale={subtitleScale}
               filename={filename}
               onRate={setRate}
               onPitch={setPitch}
               onVolume={setVolume}
               onFormat={setFormat}
               onOrientation={handleOrientation}
+              onSubtitleScale={handleSubtitleScale}
               onFilename={setFilename}
             />
           </div>
