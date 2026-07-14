@@ -55,19 +55,23 @@ export async function fetchTTSBatch(
   items: TtsBatchItem[],
   rate: number,
   volume: number,
-  onProgress?: (done: number, total: number) => void,
+  onProgress?: (done: number, total: number, currentText?: string) => void,
   pitch = 0,
 ): Promise<ArrayBuffer[]> {
   if (items.length === 0) return [];
 
-  // Chunk to stay under serverless time budget (each chunk reuses WS per voice)
-  const CHUNK = 12;
+  // Smaller chunks → status updates more often (avoids feeling stuck on one line)
+  // and stay under serverless time budget
+  const CHUNK = 6;
   const all: ArrayBuffer[] = [];
 
   for (let offset = 0; offset < items.length; offset += CHUNK) {
     const slice = items.slice(offset, offset + CHUNK);
-    // Allow ~22s per line + connect overhead, capped
-    const timeoutMs = Math.min(55_000, 15_000 + slice.length * 8_000);
+    const preview = slice[0]?.text?.slice(0, 24) ?? '';
+    onProgress?.(all.length, items.length, preview);
+
+    // Allow ~18s per line + connect/retry overhead, capped under client budget
+    const timeoutMs = Math.min(55_000, 12_000 + slice.length * 9_000);
     const { signal, clear } = abortableTimeout(timeoutMs);
     try {
       const res = await fetch('/api/tts', {
@@ -83,16 +87,20 @@ export async function fetchTTSBatch(
       if (!Array.isArray(data.audios) || data.audios.length !== slice.length) {
         throw new Error('語音批次回應格式錯誤');
       }
-      for (const b64 of data.audios) {
+      for (let i = 0; i < data.audios.length; i++) {
+        const b64 = data.audios[i];
         const binary = atob(b64);
         const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
         all.push(bytes.buffer);
+        onProgress?.(all.length, items.length, slice[i]?.text?.slice(0, 24));
       }
-      onProgress?.(all.length, items.length);
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
-        throw new Error('語音生成逾時（遠端 Edge TTS 可能無法連線），請稍後再試或減少句數');
+        const stuck = preview || '語音';
+        throw new Error(
+          `語音生成逾時（卡在「${stuck}」附近）。遠端 Edge TTS 可能無法連線，請稍後再試或減少句數`,
+        );
       }
       throw e;
     } finally {

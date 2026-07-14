@@ -4,11 +4,14 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from 'next/server';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import { VOICE_MAP, isSupportedLanguage } from '@/lib/languages';
+import { prepareTtsText } from '@/lib/ttsText';
 
 /** Per-utterance hard limit so serverless never hangs until platform kill */
-const SYNTH_TIMEOUT_MS = 22_000;
+const SYNTH_TIMEOUT_MS = 18_000;
 const CONNECT_TIMEOUT_MS = 12_000;
 const MAX_BATCH = 40;
+/** Brief gap between lines on a reused socket — reduces Edge mid-batch stalls */
+const INTER_LINE_GAP_MS = 60;
 
 function formatRate(rate: number): string {
   const pct = rate * 10;
@@ -24,6 +27,10 @@ function formatVolume(volume: number): string {
 function formatPitch(pitch: number): string {
   const hz = Math.round(Math.max(-5, Math.min(5, pitch)) * 5);
   return `${hz >= 0 ? '+' : ''}${hz}Hz`;
+}
+
+function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -53,19 +60,44 @@ function collectStream(
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
+    let settled = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let audioStream: any = null;
+
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      try {
+        audioStream?.destroy?.();
+      } catch {
+        /* ignore */
+      }
+      fn();
+    };
+
     try {
-      const { audioStream } = tts.toStream(text, {
+      const result = tts.toStream(text, {
         rate: rateStr,
         volume: volStr,
         pitch: pitchStr,
       });
+      audioStream = result.audioStream;
       audioStream.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-      audioStream.on('end', () => resolve(Buffer.concat(chunks)));
-      audioStream.on('error', reject);
+      audioStream.on('end', () => settle(() => resolve(Buffer.concat(chunks))));
+      audioStream.on('error', (err: Error) => settle(() => reject(err)));
     } catch (e) {
-      reject(e);
+      settle(() => reject(e));
     }
   });
+}
+
+function safeClose(tts: MsEdgeTTS | null) {
+  if (!tts) return;
+  try {
+    tts.close();
+  } catch {
+    /* ignore */
+  }
 }
 
 async function synthesizeOnce(
@@ -88,15 +120,16 @@ async function synthesizeOnce(
       'Edge TTS 合成',
     );
   } finally {
-    try {
-      tts.close();
-    } catch {
-      /* ignore */
-    }
+    safeClose(tts);
   }
 }
 
-/** One WebSocket for many lines with the same voice — critical for Vercel cold starts */
+/**
+ * One WebSocket for many lines with the same voice.
+ * If a mid-batch line stalls, close the socket, retry that line alone, then
+ * continue the rest on a fresh connection (avoids hanging the whole batch on
+ * short phrases like「不要怕」).
+ */
 async function synthesizeBatchSameVoice(
   texts: string[],
   voiceName: string,
@@ -104,29 +137,49 @@ async function synthesizeBatchSameVoice(
   volStr: string,
   pitchStr: string,
 ): Promise<Buffer[]> {
-  const tts = new MsEdgeTTS();
-  try {
+  const out: Buffer[] = new Array(texts.length);
+  let tts: MsEdgeTTS | null = null;
+
+  const open = async () => {
+    safeClose(tts);
+    tts = new MsEdgeTTS();
     await withTimeout(
       tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3),
       CONNECT_TIMEOUT_MS,
       'Edge TTS 連線',
     );
-    const out: Buffer[] = [];
+    return tts;
+  };
+
+  try {
+    await open();
     for (let i = 0; i < texts.length; i++) {
-      const buf = await withTimeout(
-        collectStream(tts, texts[i], rateStr, volStr, pitchStr),
-        SYNTH_TIMEOUT_MS,
-        `Edge TTS 合成 #${i + 1}`,
-      );
-      out.push(buf);
+      const label = `Edge TTS 合成 #${i + 1}/${texts.length}`;
+      try {
+        if (i > 0) await sleep(INTER_LINE_GAP_MS);
+        const buf = await withTimeout(
+          collectStream(tts!, texts[i], rateStr, volStr, pitchStr),
+          SYNTH_TIMEOUT_MS,
+          label,
+        );
+        if (!buf || buf.length < 128) {
+          throw new Error(`${label} empty audio`);
+        }
+        out[i] = buf;
+      } catch (lineErr) {
+        console.warn(`[TTS batch] ${label} failed, isolated retry:`, lineErr);
+        // Drop broken socket; synthesize this line alone; reopen for remainder
+        safeClose(tts);
+        tts = null;
+        out[i] = await synthesizeWithRetry(texts[i], voiceName, rateStr, volStr, pitchStr);
+        if (i < texts.length - 1) {
+          await open();
+        }
+      }
     }
     return out;
   } finally {
-    try {
-      tts.close();
-    } catch {
-      /* ignore */
-    }
+    safeClose(tts);
   }
 }
 
@@ -141,6 +194,7 @@ async function synthesizeWithRetry(
     return await synthesizeOnce(text, voiceName, rateStr, volStr, pitchStr);
   } catch (first) {
     console.warn('[TTS] first attempt failed, retrying once:', first);
+    await sleep(200);
     return await synthesizeOnce(text, voiceName, rateStr, volStr, pitchStr);
   }
 }
@@ -197,7 +251,11 @@ export async function POST(req: NextRequest) {
             { status: 400 },
           );
         }
-        items.push(item);
+        const spoken = prepareTtsText(item.text);
+        if (!spoken) {
+          return NextResponse.json({ error: 'each item needs non-empty text' }, { status: 400 });
+        }
+        items.push({ ...item, text: spoken });
       }
 
       // Group by voice so we open one WS per voice, not per line
@@ -250,14 +308,15 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Single mode (backward compatible): raw audio/mpeg ──
-    const text = String(payload.text ?? '').trim();
+    const rawText = String(payload.text ?? '').trim();
+    const text = prepareTtsText(rawText);
     const language = String(payload.language ?? 'zh-TW');
     const gender: Gender = payload.gender === 'male' ? 'male' : 'female';
 
     if (!text) {
       return NextResponse.json({ error: 'text required' }, { status: 400 });
     }
-    if (text.length > 5000) {
+    if (rawText.length > 5000) {
       return NextResponse.json({ error: 'text too long' }, { status: 400 });
     }
     if (!isSupportedLanguage(language)) {
@@ -271,7 +330,7 @@ export async function POST(req: NextRequest) {
     const voiceName = voices[gender] ?? voices.female;
 
     console.log(
-      `[TTS] ${language} ${gender} ${voiceName} rate=${rateStr} vol=${volStr} pitch=${pitchStr}`,
+      `[TTS] ${language} ${gender} ${voiceName} rate=${rateStr} vol=${volStr} pitch=${pitchStr} text=${text.slice(0, 40)}`,
     );
 
     const audioBuffer = await synthesizeWithRetry(text, voiceName, rateStr, volStr, pitchStr);

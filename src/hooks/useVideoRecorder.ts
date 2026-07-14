@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useRef } from 'react';
 import {
+  fetchTTS,
   fetchTTSBatch,
   fetchTranslate,
   fetchConvert,
@@ -189,16 +190,39 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
           items,
           rate,
           volume,
-          (done, total) => {
-            onStatus(`正在生成語音 ${track.label || track.language} ${done}/${total}…`);
+          (done, total, currentText) => {
+            const hint = currentText ? `「${currentText}」` : '';
+            onStatus(
+              `正在生成語音 ${track.label || track.language} ${done}/${total}${hint ? ` ${hint}` : ''}…`,
+            );
           },
           pitch,
         );
 
         const buffers: AudioBuffer[] = [];
-        for (const ab of abs) {
-          const audioBuf = await audioContext.decodeAudioData(ab.slice(0));
-          buffers.push(audioBuf);
+        for (let i = 0; i < abs.length; i++) {
+          const ab = abs[i];
+          try {
+            const audioBuf = await audioContext.decodeAudioData(ab.slice(0));
+            buffers.push(audioBuf);
+          } catch (decodeErr) {
+            // Corrupt / truncated MP3 mid-batch (e.g. short lines) — re-fetch that line alone
+            console.warn('[TTS] decode failed, re-fetch line', i, decodeErr);
+            onStatus(
+              `語音解碼失敗，重試第 ${i + 1} 句「${spoken[i]?.slice(0, 20) ?? ''}」…`,
+            );
+            const gender = resolveGender(scriptLines[i], track);
+            const retryAb = await fetchTTS(
+              spoken[i],
+              track.language,
+              gender,
+              rate,
+              volume,
+              pitch,
+            );
+            const audioBuf = await audioContext.decodeAudioData(retryAb.slice(0));
+            buffers.push(audioBuf);
+          }
         }
         trackBuffers.push(buffers);
       }
