@@ -71,6 +71,30 @@ function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
+/** Append trailing silence so MediaRecorder tail-clip hits quiet, not speech. */
+function appendSilence(
+  ctx: AudioContext,
+  buffer: AudioBuffer,
+  silenceSec: number,
+): AudioBuffer {
+  if (silenceSec <= 0) return buffer;
+  const extra = Math.max(1, Math.ceil(silenceSec * buffer.sampleRate));
+  const out = ctx.createBuffer(
+    buffer.numberOfChannels,
+    buffer.length + extra,
+    buffer.sampleRate,
+  );
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    out.getChannelData(c).set(buffer.getChannelData(c), 0);
+  }
+  return out;
+}
+
+/** MP3 decode duration often under-reports a few frames; pad schedule conservatively. */
+function speechDurationSec(duration: number): number {
+  return duration * 1.06 + 0.15;
+}
+
 function requestCanvasFrame(stream: MediaStream) {
   const track = stream.getVideoTracks()[0] as CanvasCaptureTrack | undefined;
   if (track?.requestFrame) {
@@ -229,18 +253,44 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       // Gap between lines (not after the final line).
       const LINE_GAP_SEC = 0.25;
-      // Intro / outro hold: ≥1s image with no speech (user-facing requirement).
-      // Also gives MediaRecorder room — Chrome often clips WebAudio head/tail.
+      // Intro hold: ≥1s image before speech.
       const HEAD_PAD_SEC = 1.0;
-      const END_PAD_SEC = 1.0;
+      // Outro after last spoken sample: user needs >1s so「降臨了」is not cut mid-word
+      // and the clip does not end immediately on the final syllable.
+      const END_PAD_SEC = 1.35;
+      // Extra encoder tail after the padded last buffer ends (MediaRecorder flush).
+      const ENCODER_TAIL_SEC = 0.45;
+
+      const lastLineIndex = scriptLines.length - 1;
+
+      // Speech-only durations (before silence pad) — for subtitle end times.
+      const speechOnlyEnds: number[] = scriptLines.map((_, i) =>
+        Math.max(
+          ...trackBuffers.map(bufs => speechDurationSec(bufs[i].duration)),
+          0.4,
+        ),
+      );
+
+      // Bake ≥1.35s silence into the last line so any tail-clip eats quiet, not「臨了」.
+      if (lastLineIndex >= 0) {
+        for (let t = 0; t < trackBuffers.length; t++) {
+          trackBuffers[t][lastLineIndex] = appendSilence(
+            audioContext,
+            trackBuffers[t][lastLineIndex],
+            END_PAD_SEC,
+          );
+        }
+      }
 
       for (let i = 0; i < scriptLines.length; i++) {
-        // Small safety margin: MP3 decode duration can under-report a few ms.
+        const isLast = i === lastLineIndex;
+        // Non-last: schedule with slack. Last: buffer already includes END_PAD silence.
         const maxDur = Math.max(
-          ...trackBuffers.map(bufs => bufs[i].duration * 1.02 + 0.05),
+          ...trackBuffers.map(bufs =>
+            isLast ? bufs[i].duration : speechDurationSec(bufs[i].duration),
+          ),
           0.4,
         );
-        const isLast = i === scriptLines.length - 1;
         segmentDurations[i] = maxDur + (isLast ? 0 : LINE_GAP_SEC);
       }
 
@@ -273,25 +323,25 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
         });
       });
 
-      // When the real last sample of speech finishes (true buffer lengths).
-      let actualSpeechEnd = HEAD_PAD_SEC;
+      // Last sample of last buffer (speech + baked end silence).
+      let paddedAudioEnd = HEAD_PAD_SEC;
       trackBuffers.forEach(buffers => {
         buffers.forEach((buffer, lineIndex) => {
-          actualSpeechEnd = Math.max(
-            actualSpeechEnd,
+          paddedAudioEnd = Math.max(
+            paddedAudioEnd,
             segmentStarts[lineIndex] + buffer.duration,
           );
         });
       });
-      actualSpeechEnd = Math.max(actualSpeechEnd, HEAD_PAD_SEC + 1);
+      paddedAudioEnd = Math.max(paddedAudioEnd, HEAD_PAD_SEC + 1);
 
-      // Full timeline: intro hold + speech + outro hold.
-      const totalDuration = actualSpeechEnd + END_PAD_SEC;
+      // Full timeline: intro + speech + ≥1.35s quiet + encoder flush margin.
+      const totalDuration = paddedAudioEnd + ENCODER_TAIL_SEC;
 
       // Near-silent bed from t=0 through the end so MediaStream audio never
       // goes idle (encoders otherwise drop head/tail packets).
       {
-        const bedLen = totalDuration + 0.1;
+        const bedLen = totalDuration + 0.25;
         const bedSamples = Math.max(1, Math.ceil(bedLen * audioContext.sampleRate));
         const bedBuffer = audioContext.createBuffer(1, bedSamples, audioContext.sampleRate);
         const ch = bedBuffer.getChannelData(0);
@@ -308,9 +358,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
 
       for (let i = 0; i < scriptLines.length; i++) {
         for (const trackSubs of allSubtitleTracks) {
-          // Subtitles follow speech (after intro); not shown during head/tail holds
+          // Subtitles follow speech (after intro); hide during head hold & end silence
           trackSubs[i].startAt = segmentStarts[i];
-          trackSubs[i].endAt = segmentStarts[i] + segmentDurations[i];
+          trackSubs[i].endAt = segmentStarts[i] + speechOnlyEnds[i];
         }
       }
       const flatSubtitles = allSubtitleTracks.flat();
@@ -446,7 +496,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               }
               drawFrame(canvas, activeVisual, flatSubtitles, Math.max(0, totalDuration - 0.01));
               requestCanvasFrame(streamForFrames);
-              // Extra flush window so the last audio cluster is written out
+              // Extra flush so the last audio cluster (incl. end silence) is written
               setTimeout(() => {
                 try {
                   if (rec.state === 'recording' || rec.state === 'paused') {
@@ -462,7 +512,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
                 } catch (e) {
                   finish(e instanceof Error ? e : new Error(String(e)));
                 }
-              }, 400);
+              }, 900);
             };
 
             resources.worker.onmessage = () => {
@@ -479,9 +529,9 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
               drawFrame(canvas, activeVisual, flatSubtitles, elapsed);
               requestCanvasFrame(streamForFrames);
 
-              // Drive stop from AudioContext clock (true speech+pad progress).
-              // Wall-clock alone can fire early if AudioContext lags under load.
-              if (audioElapsed >= totalDuration) {
+              // Require both clocks past totalDuration so we never stop while
+              // speech is still playing (wall alone can lead; audio alone can lag).
+              if (audioElapsed >= totalDuration && wallElapsed >= totalDuration) {
                 beginStop();
               }
             };
@@ -490,7 +540,7 @@ export function useVideoRecorder(onStatus: (msg: string) => void) {
             // Fallback if worker ticks stall: wall clock + generous slack
             setTimeout(() => {
               beginStop();
-            }, totalDuration * 1000 + 2500);
+            }, totalDuration * 1000 + 3500);
           }).catch(err => {
             finish(err instanceof Error ? err : new Error(String(err)));
           });

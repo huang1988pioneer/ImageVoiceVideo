@@ -17,7 +17,8 @@ export function escapeSsml(text: string): string {
  * Normalize text so Edge TTS is less likely to stall or misread:
  * - collapse whitespace
  * - strip western thousands separators in numbers (6,806 → 6806)
- * - give very short bare phrases a period so prosody completes cleanly
+ * - ensure terminal punctuation so prosody finishes the last syllables
+ *   (e.g. avoid cutting「降臨了」between 降 and 臨)
  */
 export function prepareTtsText(raw: string): string {
   let text = String(raw ?? '')
@@ -30,9 +31,9 @@ export function prepareTtsText(raw: string): string {
   // 6,806 / 12,000 → digits without commas (TTS often pauses or glitches on them)
   text = text.replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, '');
 
-  // Short lines without terminal punctuation often feel "stuck" mid-utterance
+  // Without a terminal mark Edge often trails off or clips the final syllable.
   const hasTerminal = /[。！？!?…\.]$/.test(text);
-  if (!hasTerminal && text.length <= 12) {
+  if (!hasTerminal) {
     text = `${text}。`;
   }
 
