@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-18T00:00:00.000Z",
+  "title": "Design System: Image Voice Video",
+  "extensions": {
+    "colorMeta": {
+      "signal-teal": {
+        "role": "primary",
+        "displayName": "Signal Teal",
+        "canonical": "#14b8a6",
+        "tonalRamp": ["#042f2e", "#0f766e", "#0d9488", "#14b8a6", "#2dd4bf", "#5eead4", "#99f6e4", "#ccfbf1"]
+      },
+      "signal-teal-light": {
+        "role": "primary",
+        "displayName": "Signal Teal Light",
+        "canonical": "#5eead4",
+        "tonalRamp": ["#134e4a", "#0f766e", "#14b8a6", "#2dd4bf", "#5eead4", "#99f6e4", "#ccfbf1", "#f0fdfa"]
+      },
+      "signal-teal-deep": {
+        "role": "primary",
+        "displayName": "Signal Teal Deep",
+        "canonical": "#0f766e",
+        "tonalRamp": ["#042f2e", "#115e59", "#0f766e", "#0d9488", "#14b8a6", "#5eead4", "#99f6e4", "#ccfbf1"]
+      },
+      "sky-accent": {
+        "role": "secondary",
+        "displayName": "Sky Accent",
+        "canonical": "#38bdf8",
+        "tonalRamp": ["#0c4a6e", "#0369a1", "#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#bae6fd", "#e0f2fe"]
+      },
+      "cyan-accent": {
+        "role": "secondary",
+        "displayName": "Cyan Accent",
+        "canonical": "#22d3ee",
+        "tonalRamp": ["#083344", "#155e75", "#0e7490", "#0891b2", "#22d3ee", "#67e8f9", "#a5f3fc", "#cffafe"]
+      },
+      "night-void": {
+        "role": "neutral",
+        "displayName": "Night Void",
+        "canonical": "#070b14",
+        "tonalRamp": ["#05070d", "#070b14", "#0c1220", "#111827", "#1e293b", "#334155", "#64748b", "#94a3b8"]
+      },
+      "night-panel": {
+        "role": "neutral",
+        "displayName": "Night Panel",
+        "canonical": "#0c1220",
+        "tonalRamp": ["#070b14", "#0c1220", "#111827", "#1a2332", "#243044", "#3d4f66", "#64748b", "#94a3b8"]
+      },
+      "ink-primary": {
+        "role": "neutral",
+        "displayName": "Ink Primary",
+        "canonical": "#EBF0F8",
+        "tonalRamp": ["#6B7385", "#9AA3B2", "#C5CCD8", "#D8DEE8", "#EBF0F8", "#F2F5FA", "#F8FAFC", "#FFFFFF"]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Ink Secondary",
+        "canonical": "#9AA3B2",
+        "tonalRamp": ["#4B5563", "#6B7385", "#9AA3B2", "#B0B8C5", "#C5CCD8", "#D8DEE8", "#EBF0F8", "#F8FAFC"]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "#6B7385",
+        "tonalRamp": ["#374151", "#4B5563", "#6B7385", "#9AA3B2", "#B0B8C5", "#C5CCD8", "#EBF0F8", "#F8FAFC"]
+      },
+      "generate-start": {
+        "role": "primary",
+        "displayName": "Generate Start",
+        "canonical": "#0d9488",
+        "tonalRamp": ["#042f2e", "#115e59", "#0f766e", "#0d9488", "#14b8a6", "#2dd4bf", "#5eead4", "#99f6e4"]
+      },
+      "generate-mid": {
+        "role": "secondary",
+        "displayName": "Generate Mid",
+        "canonical": "#0891b2",
+        "tonalRamp": ["#083344", "#155e75", "#0e7490", "#0891b2", "#06b6d4", "#22d3ee", "#67e8f9", "#a5f3fc"]
+      },
+      "generate-end": {
+        "role": "secondary",
+        "displayName": "Generate End",
+        "canonical": "#0284c7",
+        "tonalRamp": ["#0c4a6e", "#075985", "#0369a1", "#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#bae6fd"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "App wordmark only." },
+      "headline": { "displayName": "Headline", "purpose": "Primary CTA and section emphasis." },
+      "title": { "displayName": "Title", "purpose": "Card and result titles." },
+      "body": { "displayName": "Body", "purpose": "Status, helpers, form values." },
+      "label": { "displayName": "Label", "purpose": "Workflow step section labels only." }
+    },
+    "shadows": [
+      {
+        "name": "card-rest",
+        "value": "0 2px 12px rgba(0, 0, 0, 0.25)",
+        "purpose": "Default panel lift on glass cards."
+      },
+      {
+        "name": "preview-stage",
+        "value": "0 8px 40px rgba(0, 0, 0, 0.45)",
+        "purpose": "Hero canvas frame depth."
+      },
+      {
+        "name": "cta-ambient",
+        "value": "0 4px 20px rgba(8, 145, 178, 0.4)",
+        "purpose": "Primary generate button glow only."
+      },
+      {
+        "name": "signal-glow",
+        "value": "0 0 8px #14b8a6",
+        "purpose": "Live status dots and ready indicators."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-control",
+        "value": "0.15s ease, 0.2s ease, 0.25s ease",
+        "purpose": "Default state transitions on buttons, borders, and status."
+      },
+      {
+        "name": "pulse-live",
+        "value": "1.2s ease-in-out infinite",
+        "purpose": "Recording/status dot pulse; suppress under prefers-reduced-motion."
+      },
+      {
+        "name": "cta-lift",
+        "value": "transform 0.15s, box-shadow 0.25s, filter 0.2s",
+        "purpose": "Generate button hover lift (−2px) and glow."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "699px" },
+      { "name": "tablet", "value": "1099px" },
+      { "name": "desktop", "value": "1100px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Generate",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Full-width primary CTA — 生成影片 — the only loud action.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">生成影片</button>",
+      "css": ".ds-btn-primary { width: 100%; padding: 15px 20px; border-radius: 12px; border: none; background: linear-gradient(135deg, #0d9488 0%, #0891b2 55%, #0284c7 100%); color: #fff; font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; font-size: 1rem; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; box-shadow: 0 4px 20px rgba(8, 145, 178, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15); transition: opacity 0.2s, transform 0.15s, box-shadow 0.25s, filter 0.2s; } .ds-btn-primary:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.06); box-shadow: 0 10px 32px rgba(8, 145, 178, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2); } .ds-btn-primary:focus-visible { outline: 2px solid rgba(20, 184, 166, 0.7); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; background: rgba(255, 255, 255, 0.1); box-shadow: none; filter: none; }"
+    },
+    {
+      "name": "Segment Control",
+      "kind": "button",
+      "refersTo": "button-segment",
+      "description": "Format / orientation segment chip; active state uses signal teal.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg-btn\" type=\"button\">MP4</button><button class=\"ds-seg-btn ds-seg-btn-active\" type=\"button\">WebM</button></div>",
+      "css": ".ds-seg { display: flex; gap: 8px; flex-wrap: wrap; } .ds-seg-btn { padding: 8px 18px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.58); font-size: 0.8rem; font-weight: 700; font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; letter-spacing: 0.04em; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; } .ds-seg-btn:hover { border-color: rgba(20, 184, 166, 0.45); color: #fff; background: rgba(20, 184, 166, 0.08); } .ds-seg-btn-active { border-color: #14b8a6 !important; background: rgba(20, 184, 166, 0.16) !important; color: #5eead4 !important; box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.15); } .ds-seg-btn:focus-visible { outline: 2px solid rgba(20, 184, 166, 0.7); outline-offset: 2px; }"
+    },
+    {
+      "name": "Glass Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Workflow panel card with hairline border and light lift.",
+      "html": "<section class=\"ds-card\"><header class=\"ds-card-h\"><p class=\"ds-label\">封面圖片</p><span class=\"ds-step\">1</span></header><p class=\"ds-card-body\">Upload a still to begin.</p></section>",
+      "css": ".ds-card { background: rgba(255, 255, 255, 0.045); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 16px; padding: 14px 16px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25); color: rgba(255, 255, 255, 0.92); font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; transition: border-color 0.2s, box-shadow 0.2s; } .ds-card:hover { border-color: rgba(255, 255, 255, 0.14); } .ds-card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; } .ds-label { display: flex; align-items: center; gap: 7px; font-size: 0.68rem; font-weight: 700; color: rgba(255, 255, 255, 0.42); text-transform: uppercase; letter-spacing: 0.12em; margin: 0; } .ds-label::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: linear-gradient(135deg, #14b8a6, #38bdf8); box-shadow: 0 0 8px rgba(20, 184, 166, 0.5); } .ds-step { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 0.65rem; font-weight: 800; color: #5eead4; background: rgba(20, 184, 166, 0.12); border: 1px solid rgba(20, 184, 166, 0.28); } .ds-card-body { margin: 0; font-size: 0.875rem; color: rgba(255, 255, 255, 0.62); line-height: 1.6; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Dark translucent field for script and filename.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">檔名</span><input class=\"ds-input\" type=\"text\" placeholder=\"optional-name\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; } .ds-field-label { font-size: 0.85rem; color: rgba(255, 255, 255, 0.68); } .ds-input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.92); font: inherit; font-size: 0.875rem; outline: none; transition: border-color 0.15s, box-shadow 0.15s; } .ds-input::placeholder { color: rgba(255, 255, 255, 0.35); } .ds-input:hover { border-color: rgba(255, 255, 255, 0.18); } .ds-input:focus { border-color: rgba(20, 184, 166, 0.55); box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "chip-status",
+      "description": "Header ready/recording pill with live signal dot.",
+      "html": "<span class=\"ds-chip\"><span class=\"ds-chip-dot\"></span>就緒</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; color: #5eead4; background: rgba(20, 184, 166, 0.1); border: 1px solid rgba(20, 184, 166, 0.25); } .ds-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: #14b8a6; box-shadow: 0 0 6px #14b8a6; }"
+    },
+    {
+      "name": "Image Dropzone",
+      "kind": "custom",
+      "refersTo": "dropzone",
+      "description": "Cover image drop target; teal wash when active.",
+      "html": "<div class=\"ds-drop\" role=\"button\" tabindex=\"0\"><strong>拖放圖片</strong><span>或點擊選擇 · PNG / JPG</span></div>",
+      "css": ".ds-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 120px; padding: 12px 16px; border-radius: 12px; border: 1px dashed rgba(255, 255, 255, 0.16); background: rgba(0, 0, 0, 0.25); color: rgba(255, 255, 255, 0.68); font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s, box-shadow 0.2s; } .ds-drop strong { font-size: 0.88rem; color: rgba(255, 255, 255, 0.92); font-weight: 600; } .ds-drop span { font-size: 0.72rem; color: rgba(255, 255, 255, 0.42); } .ds-drop:hover, .ds-drop:focus-visible { border-color: rgba(20, 184, 166, 0.45); background: rgba(20, 184, 166, 0.07); box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.08); outline: none; }"
+    },
+    {
+      "name": "App Header",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Sticky glass header — logo mark, bilingual title, status chip.",
+      "html": "<header class=\"ds-nav\"><div class=\"ds-nav-brand\"><span class=\"ds-nav-mark\"></span><div><div class=\"ds-nav-title\">Image Voice Video</div><div class=\"ds-nav-sub\">圖片 · 語音 · 多語字幕影片</div></div></div><span class=\"ds-chip\"><span class=\"ds-chip-dot\"></span>就緒</span></header>",
+      "css": ".ds-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 28px; border-bottom: 1px solid rgba(255, 255, 255, 0.09); background: rgba(12, 18, 32, 0.72); backdrop-filter: blur(18px) saturate(1.4); font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; } .ds-nav-brand { display: flex; align-items: center; gap: 12px; min-width: 0; } .ds-nav-mark { width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(145deg, rgba(20, 184, 166, 0.25), rgba(56, 189, 248, 0.15)); border: 1px solid rgba(20, 184, 166, 0.35); box-shadow: 0 0 20px rgba(20, 184, 166, 0.15); flex-shrink: 0; } .ds-nav-title { font-weight: 800; font-size: 1.02rem; letter-spacing: -0.03em; line-height: 1.2; color: #5eead4; } .ds-nav-sub { font-size: 0.68rem; color: rgba(255, 255, 255, 0.42); font-weight: 500; } .ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; color: #5eead4; background: rgba(20, 184, 166, 0.1); border: 1px solid rgba(20, 184, 166, 0.25); } .ds-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: #14b8a6; box-shadow: 0 0 6px #14b8a6; }"
+    },
+    {
+      "name": "Status Bar",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Pipeline status line under the preview; recording state uses teal.",
+      "html": "<div class=\"ds-status ds-status-live\"><span class=\"ds-status-dot\"></span><span>生成中…</span></div>",
+      "css": ".ds-status { padding: 12px 16px; border-radius: 12px; background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.09); font-size: 0.875rem; color: rgba(255, 255, 255, 0.42); min-height: 48px; display: flex; align-items: center; gap: 10px; font-family: Inter, 'Noto Sans TC', system-ui, sans-serif; } .ds-status-live { border-color: rgba(20, 184, 166, 0.4); color: #5eead4; background: rgba(20, 184, 166, 0.08); box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.08), 0 0 24px rgba(20, 184, 166, 0.1); } .ds-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #14b8a6; box-shadow: 0 0 8px #14b8a6; flex-shrink: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Studio Console",
+    "overview": "This is a dark production desk for content creators who need a narrated clip from a still—fast. Surfaces sit on a near-black void (#070b14) with translucent glass panels; teal signal lights mark readiness and selection; the live canvas is the stage. Density is moderate on the control rail and generous around the preview: the interface never competes with the frame being authored.\n\nPersonality is fast, clear, capable (from PRODUCT.md). Type is a single technical sans stack (Inter + Noto Sans TC) for bilingual zh-TW / Latin UI. Motion stays responsive—status pulses, hover lifts on the primary CTA—not scroll choreography. The system explicitly rejects generic SaaS dashboards: no sidebar nav forests, no metric cards, no enterprise gray chrome. It is a focused creator workspace with one continuous flow.",
+    "keyCharacteristics": [
+      "Night void base with teal/sky signal accents (restrained color strategy: accent ≤ ~10% of surface)",
+      "Preview-first split: compact left controls, sticky right stage",
+      "Glass header and card surfaces via blur + hairline borders",
+      "One loud primary action: 生成影片",
+      "Bilingual-ready type; short zh-TW status copy"
+    ],
+    "rules": [
+      {
+        "name": "The Signal Teal Rule",
+        "body": "Teal marks state (ready, selected, recording)—not large fills. If a full panel is teal, the system has failed.",
+        "section": "colors"
+      },
+      {
+        "name": "The Night Void Rule",
+        "body": "Body background stays near-black (#070b14 or tonal siblings). No cream/sand paper, no purple AI-gradient body.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Stack Rule",
+        "body": "Do not introduce a second display family for “premium.” Bilingual clarity beats decorative pairing.",
+        "section": "typography"
+      },
+      {
+        "name": "The Label Budget Rule",
+        "body": "Uppercase tracked labels are reserved for the main workflow steps. Do not stamp a kicker above every subsection.",
+        "section": "typography"
+      },
+      {
+        "name": "The No Ghost-Card Rule",
+        "body": "Never pair a 1px border with a soft wide drop shadow (blur ≥ 16px) on the same control for decoration.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Flat-By-Default Controls Rule",
+        "body": "Segment buttons and list rows stay flat; elevation appears on hover/active border and tint, not floating shadows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep one continuous workspace: image → script → tracks → settings → preview → generate.",
+      "Do treat the preview as source of truth for framing, subtitles, and orientation.",
+      "Do use Signal Teal for state and primary interactive affordances only.",
+      "Do maintain readable ink: prefer --text / ink-primary for body; bump contrast rather than “elegant gray.”",
+      "Do honor prefers-reduced-motion for pulses and entrance motion.",
+      "Do keep the generate button the single dominant CTA on the screen."
+    ],
+    "donts": [
+      "Don't look like a generic SaaS dashboard—no sidebar navigation forests, metric cards, or enterprise gray chrome (PRODUCT.md anti-reference).",
+      "Don't use gradient text on product chrome (logo wordmark is the only existing exception; do not expand the pattern).",
+      "Don't use side-stripe borders (border-left/border-right > 1px) as accent on cards or alerts.",
+      "Don't add decorative CSS grid overlays or diagonal stripe backgrounds as “tech texture.”",
+      "Don't stack identical icon+title+text marketing cards; this is a tool, not a landing.",
+      "Don't put an uppercase tracked eyebrow on every subsection—workflow step labels only.",
+      "Don't ship border-radius ≥ 32px on cards or panels; stay on the 8 / 12 / 16 / 22 scale.",
+      "Don't pair 1px border + soft wide shadow (blur ≥ 16px) on the same decorative card (ghost-card ban)."
+    ]
+  }
+}
